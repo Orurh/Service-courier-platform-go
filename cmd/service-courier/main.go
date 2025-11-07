@@ -12,6 +12,8 @@ import (
 	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/http/handlers"
 	"course-go-avito-Orurh/internal/http/router"
+	"course-go-avito-Orurh/internal/repository"
+	"course-go-avito-Orurh/internal/service"
 )
 
 func main() {
@@ -20,8 +22,17 @@ func main() {
 		log.Fatalf("config load error: %v", err)
 	}
 
-	h := handlers.New(log.Default())
-	mux := router.New(h)
+	pool, err := repository.NewPool(context.Background(), cfg.DB.DSN())
+	if err != nil {
+		log.Fatalf("database connection error: %v", err)
+	}
+	defer pool.Close()
+
+	base := handlers.New(log.Default())
+	repo := repository.NewCourierRepo(pool)
+	uc := service.NewCourierService(repo)
+	courier := handlers.NewCourierHandler(uc)
+	mux := router.New(base, courier)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
