@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -45,13 +44,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) 
 
 const (
 	bodyLimit = 1 << 20 // 1 MiB
-	dbTimeout = 3 * time.Second
 )
-
-// withDBTimeout — context with DB timeout.
-func withDBTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, dbTimeout)
-}
 
 // decodeJSON — decodes JSON from request body.
 func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) bool {

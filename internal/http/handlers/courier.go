@@ -1,20 +1,28 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
-	"course-go-avito-Orurh/internal/service"
 )
 
+// CourierUsecase exposes business operations for couriers to the HTTP layer.
+type CourierUsecase interface {
+	Get(ctx context.Context, id int64) (*domain.Courier, error)
+	List(ctx context.Context, limit, offset *int) ([]domain.Courier, error)
+	Create(ctx context.Context, c *domain.Courier) (int64, error)
+	UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error)
+}
+
 // CourierHandler serves HTTP endpoints for courier resources.
-type CourierHandler struct{ uc service.CourierUsecase }
+type CourierHandler struct{ uc CourierUsecase }
 
 // NewCourierHandler wires a CourierUsecase into HTTP handlers.
-func NewCourierHandler(uc service.CourierUsecase) *CourierHandler { return &CourierHandler{uc: uc} }
+func NewCourierHandler(uc CourierUsecase) *CourierHandler { return &CourierHandler{uc: uc} }
 
 // GetByID handles GET /courier/{id}.
 func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -23,10 +31,8 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "invalid id")
 		return
 	}
-	ctx, cancel := withDBTimeout(r.Context())
-	defer cancel()
 
-	c, err := h.uc.Get(ctx, id)
+	c, err := h.uc.Get(r.Context(), id)
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, c)
@@ -39,9 +45,6 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 // List handles GET /couriers.
 func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := withDBTimeout(r.Context())
-	defer cancel()
-
 	q := r.URL.Query()
 	var (
 		limitPtr, offsetPtr *int
@@ -63,7 +66,7 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 		offsetPtr = &v
 	}
 
-	list, err := h.uc.List(ctx, limitPtr, offsetPtr)
+	list, err := h.uc.List(r.Context(), limitPtr, offsetPtr)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "internal error")
 		return
@@ -77,10 +80,7 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-	ctx, cancel := withDBTimeout(r.Context())
-	defer cancel()
-
-	id, err := h.uc.Create(ctx, &req)
+	id, err := h.uc.Create(r.Context(), &req)
 	switch {
 	case err == nil:
 		w.Header().Set("Location", "/courier/"+strconv.FormatInt(id, 10))
@@ -100,11 +100,7 @@ func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-
-	ctx, cancel := withDBTimeout(r.Context())
-	defer cancel()
-
-	_, err := h.uc.UpdatePartial(ctx, req)
+	_, err := h.uc.UpdatePartial(r.Context(), req)
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})

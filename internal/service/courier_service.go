@@ -3,22 +3,42 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
 )
 
-type courierService struct {
-	repo CourierRepository
+type courierRepository interface {
+	Get(ctx context.Context, id int64) (*domain.Courier, error)
+	List(ctx context.Context, limit, offset *int) ([]domain.Courier, error)
+	Create(ctx context.Context, c *domain.Courier) (int64, error)
+	UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error)
 }
 
-// NewCourierService creates a CourierUsecase implementation backed by a repository.
-func NewCourierService(r CourierRepository) CourierUsecase {
-	return &courierService{repo: r}
+type courierService struct {
+	repo             courierRepository
+	operationTimeout time.Duration
+}
+
+// NewCourierService creates a service...
+func NewCourierService(r courierRepository, timeout time.Duration) *courierService {
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	return &courierService{repo: r, operationTimeout: timeout}
+}
+
+// withOperationTimeout
+func (s *courierService) withOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, s.operationTimeout)
 }
 
 // General validation
 func validateCreate(c *domain.Courier) error {
+	if c == nil {
+		return apperr.Invalid
+	}
 	if strings.TrimSpace(c.Name) == "" {
 		return apperr.Invalid
 	}
@@ -51,6 +71,8 @@ func validateUpdate(u *domain.PartialCourierUpdate) error {
 }
 
 func (s *courierService) Get(ctx context.Context, id int64) (*domain.Courier, error) {
+	ctx, cancel := s.withOperationTimeout(ctx)
+	defer cancel()
 	c, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -62,24 +84,26 @@ func (s *courierService) Get(ctx context.Context, id int64) (*domain.Courier, er
 }
 
 func (s *courierService) List(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
+	ctx, cancel := s.withOperationTimeout(ctx)
+	defer cancel()
 	return s.repo.List(ctx, limit, offset)
 }
 
 func (s *courierService) Create(ctx context.Context, c *domain.Courier) (int64, error) {
 	if err := validateCreate(c); err != nil {
-		return 0, apperr.Invalid
-	}
-	id, err := s.repo.Create(ctx, c)
-	if err != nil {
 		return 0, err
 	}
-	return id, nil
+	ctx, cancel := s.withOperationTimeout(ctx)
+	defer cancel()
+	return s.repo.Create(ctx, c)
 }
 
 func (s *courierService) UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
 	if err := validateUpdate(&u); err != nil {
-		return false, apperr.Invalid
+		return false, err
 	}
+	ctx, cancel := s.withOperationTimeout(ctx)
+	defer cancel()
 	ok, err := s.repo.UpdatePartial(ctx, u)
 	if err != nil {
 		return false, err

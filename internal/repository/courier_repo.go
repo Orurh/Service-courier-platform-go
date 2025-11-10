@@ -35,14 +35,12 @@ func (r *CourierRepo) Get(ctx context.Context, id int64) (*domain.Courier, error
 func (r *CourierRepo) List(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
 	q := `SELECT id, name, phone, status FROM couriers ORDER BY id`
 	args := make([]any, 0, 2)
-	pi := 1
 	if limit != nil {
-		q += fmt.Sprintf(" LIMIT $%d", pi)
+		q += fmt.Sprintf(" LIMIT $%d", len(args)+1)
 		args = append(args, *limit)
-		pi++
 	}
 	if offset != nil {
-		q += fmt.Sprintf(" OFFSET $%d", pi)
+		q += fmt.Sprintf(" OFFSET $%d", len(args)+1)
 		args = append(args, *offset)
 	}
 
@@ -51,8 +49,11 @@ func (r *CourierRepo) List(ctx context.Context, limit, offset *int) ([]domain.Co
 		return nil, err
 	}
 	defer rows.Close()
-
-	var out []domain.Courier
+	capacity := 0
+	if limit != nil && *limit > 0 {
+		capacity = *limit
+	}
+	out := make([]domain.Courier, 0, capacity)
 	for rows.Next() {
 		var c domain.Courier
 		if err := rows.Scan(&c.ID, &c.Name, &c.Phone, &c.Status); err != nil {

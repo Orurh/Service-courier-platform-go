@@ -14,15 +14,43 @@ import (
 	"course-go-avito-Orurh/internal/http/router"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func connectDbWithRetry(ctx context.Context, dsn string, retries int, delay time.Duration) (*pgxpool.Pool, error) {
+	var lastErr error
+	const attemptTimeout = 3 * time.Second
+	for i := 1; i <= retries; i++ {
+		retriesCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		pool, err := repository.NewPool(retriesCtx, dsn)
+		cancel()
+		if err == nil {
+			log.Printf("db connected on attempt %d", i)
+			return pool, nil
+		}
+		lastErr = err
+		log.Printf("db connect failed (attempt %d/%d): %v", i, retries, err)
+		if i < retries {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+	}
+	return nil, fmt.Errorf("db connect failed after %d attempts: %w", retries, lastErr)
+}
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config load error: %v", err)
 	}
+	ctxSignals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	pool, err := repository.NewPool(context.Background(), cfg.DB.DSN())
+	pool, err := connectDbWithRetry(ctxSignals, cfg.DB.DSN(), 10, time.Second)
 	if err != nil {
 		log.Fatalf("database connection error: %v", err)
 	}
@@ -30,7 +58,8 @@ func main() {
 
 	base := handlers.New(log.Default())
 	repo := repository.NewCourierRepo(pool)
-	uc := service.NewCourierService(repo)
+	uc := service.NewCourierService(repo, 3*time.Second)
+
 	courier := handlers.NewCourierHandler(uc)
 	mux := router.New(base, courier)
 
@@ -56,10 +85,7 @@ func main() {
 		}
 	}()
 
-	ctxSignals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	<-ctxSignals.Done()
-
 	log.Println("Shutting down service-courier")
 
 	ctxShutdown, cancel := context.WithTimeout(context.Background(), 15*time.Second)
