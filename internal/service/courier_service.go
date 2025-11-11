@@ -9,28 +9,22 @@ import (
 	"course-go-avito-Orurh/internal/domain"
 )
 
-type courierRepository interface {
-	Get(ctx context.Context, id int64) (*domain.Courier, error)
-	List(ctx context.Context, limit, offset *int) ([]domain.Courier, error)
-	Create(ctx context.Context, c *domain.Courier) (int64, error)
-	UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error)
-}
-
-type courierService struct {
-	repo             courierRepository
+// CourierService coordinates courier business logic and orchestrates repository calls.
+type CourierService struct {
+	repo             CourierRepository
 	operationTimeout time.Duration
 }
 
-// NewCourierService creates a service...
-func NewCourierService(r courierRepository, timeout time.Duration) *courierService {
+// NewCourierService creates and configures a CourierService.
+func NewCourierService(r CourierRepository, timeout time.Duration) *CourierService {
 	if timeout <= 0 {
 		timeout = 3 * time.Second
 	}
-	return &courierService{repo: r, operationTimeout: timeout}
+	return &CourierService{repo: r, operationTimeout: timeout}
 }
 
 // withOperationTimeout
-func (s *courierService) withOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func (s *CourierService) withOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, s.operationTimeout)
 }
 
@@ -70,7 +64,8 @@ func validateUpdate(u *domain.PartialCourierUpdate) error {
 	return nil
 }
 
-func (s *courierService) Get(ctx context.Context, id int64) (*domain.Courier, error) {
+// Get retrieves a courier by its ID. It returns (nil, nil) if the courier is not found.
+func (s *CourierService) Get(ctx context.Context, id int64) (*domain.Courier, error) {
 	ctx, cancel := s.withOperationTimeout(ctx)
 	defer cancel()
 	c, err := s.repo.Get(ctx, id)
@@ -83,13 +78,15 @@ func (s *courierService) Get(ctx context.Context, id int64) (*domain.Courier, er
 	return c, nil
 }
 
-func (s *courierService) List(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
+// List returns couriers with optional pagination
+func (s *CourierService) List(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
 	ctx, cancel := s.withOperationTimeout(ctx)
 	defer cancel()
 	return s.repo.List(ctx, limit, offset)
 }
 
-func (s *courierService) Create(ctx context.Context, c *domain.Courier) (int64, error) {
+// Create persists a new courier and returns its generated ID.
+func (s *CourierService) Create(ctx context.Context, c *domain.Courier) (int64, error) {
 	if err := validateCreate(c); err != nil {
 		return 0, err
 	}
@@ -98,7 +95,8 @@ func (s *courierService) Create(ctx context.Context, c *domain.Courier) (int64, 
 	return s.repo.Create(ctx, c)
 }
 
-func (s *courierService) UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
+// UpdatePartial applies a partial update to a courier. It returns true if a row was updated.
+func (s *CourierService) UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
 	if err := validateUpdate(&u); err != nil {
 		return false, err
 	}
