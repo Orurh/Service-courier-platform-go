@@ -6,7 +6,8 @@ import (
 	"course-go-avito-Orurh/internal/http/handlers"
 	"course-go-avito-Orurh/internal/http/router"
 	"course-go-avito-Orurh/internal/repository"
-	"course-go-avito-Orurh/internal/service"
+	"course-go-avito-Orurh/internal/service/courier"
+
 	"fmt"
 	"log"
 	"net/http"
@@ -16,8 +17,16 @@ import (
 	"go.uber.org/dig"
 )
 
-// BuildContainer constructs the application's DI container
-func BuildContainer(ctx context.Context) (*dig.Container, error) {
+// MustBuildContainer constructs the application's DI container
+func MustBuildContainer(ctx context.Context) *dig.Container {
+	container, err := buildContainer(ctx)
+	if err != nil {
+		log.Fatalf("failed to build container: %v", err)
+	}
+	return container
+}
+
+func buildContainer(ctx context.Context) (*dig.Container, error) {
 	container := dig.New()
 
 	if err := registerCore(container, ctx); err != nil {
@@ -60,19 +69,15 @@ func registerDb(container *dig.Container) error {
 }
 
 func registerService(container *dig.Container) error {
-	if err := container.Provide(
-		repository.NewCourierRepo,
-		dig.As(new(service.CourierRepository)),
-	); err != nil {
+	if err := container.Provide(repository.NewCourierRepo); err != nil {
 		return fmt.Errorf("provide repo: %w", err)
 	}
 	if err := container.Provide(func() time.Duration { return 3 * time.Second }); err != nil {
 		return fmt.Errorf("provide timeout: %w", err)
 	}
-	if err := container.Provide(
-		service.NewCourierService,
-		dig.As(new(handlers.CourierUsecase)),
-	); err != nil {
+	if err := container.Provide(func(r *repository.CourierRepo, d time.Duration) *courier.Service {
+		return courier.NewService(r, d)
+	}); err != nil {
 		return fmt.Errorf("provide service: %w", err)
 	}
 	return nil
@@ -89,10 +94,8 @@ func registerHTTP(container *dig.Container) error {
 			IdleTimeout:       60 * time.Second,
 		}
 	}
-	// container.Provide(service.NewCourierService, dig.As(new(handlers.СourierUsecase)))
 	return provideAll(container,
 		handlers.New,
-		// handlers.ProvideCourierUsercase,
 		handlers.NewCourierHandler,
 		router.New,
 		serverProvider,

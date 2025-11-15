@@ -6,14 +6,16 @@ import (
 	"strconv"
 
 	"course-go-avito-Orurh/internal/apperr"
-	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/service/courier"
 )
 
 // CourierHandler serves HTTP endpoints for courier resources.
-type CourierHandler struct{ uc CourierUsecase }
+type CourierHandler struct{ uc courierUsecase }
 
 // NewCourierHandler wires a CourierUsecase into HTTP handlers.
-func NewCourierHandler(uc CourierUsecase) *CourierHandler { return &CourierHandler{uc: uc} }
+func NewCourierHandler(uc *courier.Service) *CourierHandler {
+	return &CourierHandler{uc: uc}
+}
 
 // GetByID handles GET /courier/{id}.
 func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +28,7 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	c, err := h.uc.Get(r.Context(), id)
 	switch {
 	case err == nil:
-		writeJSON(w, r, http.StatusOK, c)
+		writeJSON(w, r, http.StatusOK, modelToResponse(*c))
 	case errors.Is(err, apperr.NotFound):
 		writeError(w, r, http.StatusNotFound, "not found")
 	default:
@@ -62,16 +64,16 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, r, http.StatusOK, list)
+	writeJSON(w, r, http.StatusOK, modelsToResponse(list))
 }
 
 // Create handles POST /courier.
 func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req domain.Courier
+	var req createCourierRequest
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-	id, err := h.uc.Create(r.Context(), &req)
+	id, err := h.uc.Create(r.Context(), req.toModel())
 	switch {
 	case err == nil:
 		w.Header().Set("Location", "/courier/"+strconv.FormatInt(id, 10))
@@ -87,11 +89,11 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Update handles PUT /courier with partial updates from the request body.
 func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
-	var req domain.PartialCourierUpdate
+	var req updateCourierRequest
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-	_, err := h.uc.UpdatePartial(r.Context(), req)
+	_, err := h.uc.UpdatePartial(r.Context(), req.toModel())
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})

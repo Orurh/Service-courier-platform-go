@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -10,8 +11,23 @@ import (
 	"go.uber.org/dig"
 )
 
-// Run starts the HTTP server using the provided DI container
-func Run(container *dig.Container) error {
+// MustRun starts the HTTP server using the provided DI container
+func MustRun(container *dig.Container) {
+	if err := run(container); err != nil {
+		switch {
+		case errors.Is(err, context.Canceled):
+			log.Println("shutdown requested, exiting")
+			return
+		case errors.Is(err, context.DeadlineExceeded):
+			log.Println("startup aborted: startup timeout exceeded")
+			return
+		default:
+			log.Fatalf("run error: %v", err)
+		}
+	}
+}
+
+func run(container *dig.Container) error {
 	return container.Invoke(func(server *http.Server, ctx context.Context, pool *pgxpool.Pool, logger *log.Logger) error {
 		startServer(server, logger)
 		waitForShutdown(ctx, logger)
