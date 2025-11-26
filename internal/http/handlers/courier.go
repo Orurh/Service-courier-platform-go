@@ -6,15 +6,14 @@ import (
 	"strconv"
 
 	"course-go-avito-Orurh/internal/apperr"
-	"course-go-avito-Orurh/internal/service/courier"
 )
 
 // CourierHandler serves HTTP endpoints for courier resources.
-type CourierHandler struct{ uc courierUsecase }
+type CourierHandler struct{ usecase courierUsecase }
 
 // NewCourierHandler wires a CourierUsecase into HTTP handlers.
-func NewCourierHandler(uc *courier.Service) *CourierHandler {
-	return &CourierHandler{uc: uc}
+func NewCourierHandler(uc courierUsecase) *CourierHandler {
+	return &CourierHandler{usecase: uc}
 }
 
 // GetByID handles GET /courier/{id}.
@@ -25,7 +24,7 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := h.uc.Get(r.Context(), id)
+	c, err := h.usecase.Get(r.Context(), id)
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, modelToResponse(*c))
@@ -59,7 +58,7 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 		offsetPtr = &v
 	}
 
-	list, err := h.uc.List(r.Context(), limitPtr, offsetPtr)
+	list, err := h.usecase.List(r.Context(), limitPtr, offsetPtr)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "internal error")
 		return
@@ -73,7 +72,7 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-	id, err := h.uc.Create(r.Context(), req.toModel())
+	id, err := h.usecase.Create(r.Context(), req.toModel())
 	switch {
 	case err == nil:
 		w.Header().Set("Location", "/courier/"+strconv.FormatInt(id, 10))
@@ -93,7 +92,7 @@ func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if ok := decodeJSON(w, r, &req); !ok {
 		return
 	}
-	_, err := h.uc.UpdatePartial(r.Context(), req.toModel())
+	_, err := h.usecase.UpdatePartial(r.Context(), req.toModel())
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})

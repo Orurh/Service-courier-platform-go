@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/service/courier"
+	"course-go-avito-Orurh/internal/service/delivery"
 )
 
 // сourierUsecase exposes courier-related business operations to the HTTP layer.
@@ -13,7 +15,17 @@ type courierUsecase interface {
 	UpdatePartial(ctx context.Context, u domain.PartialCourierUpdate) (bool, error)
 }
 
-// можно через адаптер сделать, тогда не придется имплементировать сервис, дальше по заданиям решу, что делать
-// func NewCourierUsecase(service *courier.Service) courierUsecase {
-// 	return service // CourierService реализует все методы интерфейса
-// }
+// NewCourierUsecase wires a CourierService into a courierUsecase.
+func NewCourierUsecase(service *courier.Service) courierUsecase {
+	return service // CourierService реализует все методы интерфейса
+}
+
+type deliveryUsecase interface {
+	Assign(ctx context.Context, orderID string) (domain.AssignResult, error)
+	Unassign(ctx context.Context, orderID string) (domain.UnassignResult, error)
+}
+
+// NewDeliveryUsecase wires a DeliveryService into a deliveryUsecase.
+func NewDeliveryUsecase(svc *delivery.Service) deliveryUsecase {
+	return svc
+}

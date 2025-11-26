@@ -7,6 +7,7 @@ import (
 	"course-go-avito-Orurh/internal/http/router"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/courier"
+	"course-go-avito-Orurh/internal/service/delivery"
 
 	"fmt"
 	"log"
@@ -16,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/dig"
 )
+
+var dbConnect = connectDbWithRetry
 
 // MustBuildContainer constructs the application's DI container
 func MustBuildContainer(ctx context.Context) *dig.Container {
@@ -63,7 +66,7 @@ func registerCore(container *dig.Container, ctx context.Context) error {
 
 func registerDb(container *dig.Container) error {
 	providerDB := func(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-		return connectDbWithRetry(ctx, cfg.DB.DSN(), 10, time.Second)
+		return dbConnect(ctx, cfg.DB.DSN(), 10, time.Second)
 	}
 	return provideAll(container, providerDB)
 }
@@ -72,13 +75,30 @@ func registerService(container *dig.Container) error {
 	if err := container.Provide(repository.NewCourierRepo); err != nil {
 		return fmt.Errorf("provide repo: %w", err)
 	}
+	if err := container.Provide(repository.NewDeliveryRepo); err != nil {
+		return fmt.Errorf("provide repo: %w", err)
+	}
 	if err := container.Provide(func() time.Duration { return 3 * time.Second }); err != nil {
 		return fmt.Errorf("provide timeout: %w", err)
 	}
-	if err := container.Provide(func(r *repository.CourierRepo, d time.Duration) *courier.Service {
-		return courier.NewService(r, d)
+	if err := container.Provide(func(repo *repository.CourierRepo, timeout time.Duration) *courier.Service {
+		return courier.NewService(repo, timeout)
 	}); err != nil {
 		return fmt.Errorf("provide service: %w", err)
+	}
+	if err := container.Provide(func() delivery.TimeFactory {
+		return delivery.NewTimeFactory()
+	}); err != nil {
+		return fmt.Errorf("provide delivery factory: %w", err)
+	}
+	if err := container.Provide(func(
+		repo *repository.DeliveryRepo,
+		timeout time.Duration,
+		factory delivery.TimeFactory,
+	) *delivery.Service {
+		return delivery.NewDeliveryService(repo, factory, timeout)
+	}); err != nil {
+		return fmt.Errorf("provide delivery service: %w", err)
 	}
 	return nil
 }
@@ -96,7 +116,10 @@ func registerHTTP(container *dig.Container) error {
 	}
 	return provideAll(container,
 		handlers.New,
+		handlers.NewCourierUsecase,
 		handlers.NewCourierHandler,
+		handlers.NewDeliveryUsecase,
+		handlers.NewDeliveryHandler,
 		router.New,
 		serverProvider,
 	)
