@@ -23,52 +23,50 @@ func NewService(r courierRepository, timeout time.Duration) *Service {
 	return &Service{repo: r, operationTimeout: timeout}
 }
 
-// courier
 func (s *Service) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, s.operationTimeout)
 }
 
-// validateCreate validates a courier for creation.
 func validateCreate(c *domain.Courier) error {
 	if c == nil {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if strings.TrimSpace(c.Name) == "" {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if !domain.ValidatePhone(c.Phone) {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if !domain.CourierStatus(c.Status).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if c.TransportType == "" {
 		c.TransportType = domain.TransportTypeFoot
 	}
 	if !domain.CourierTransportType(c.TransportType).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	return nil
 }
 
 func validateUpdate(u *domain.PartialCourierUpdate) error {
 	if u.ID <= 0 {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Name == nil && u.Phone == nil && u.Status == nil && u.TransportType == nil {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Phone != nil && !domain.ValidatePhone(*u.Phone) {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Status != nil && !domain.CourierStatus(*u.Status).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.TransportType != nil && !domain.CourierTransportType(*u.TransportType).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	return nil
 }
@@ -82,7 +80,7 @@ func (s *Service) Get(ctx context.Context, id int64) (*domain.Courier, error) {
 		return nil, err
 	}
 	if c == nil {
-		return nil, apperr.NotFound
+		return nil, apperr.ErrNotFound
 	}
 	return c, nil
 }
@@ -116,7 +114,7 @@ func (s *Service) UpdatePartial(ctx context.Context, u domain.PartialCourierUpda
 		return false, err
 	}
 	if !ok {
-		return false, apperr.NotFound
+		return false, apperr.ErrNotFound
 	}
 	return true, nil
 }

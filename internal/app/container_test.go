@@ -2,16 +2,18 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
+
 	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/http/handlers"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/dig"
 )
 
 func newTestLogger() *log.Logger {
@@ -25,7 +27,7 @@ func setupTestContainer(t *testing.T) *dig.Container {
 
 	providers := []struct {
 		name     string
-		provider interface{}
+		provider any
 	}{
 		{"context", func() context.Context { return context.Background() }},
 		{"logger", func() *log.Logger { return newTestLogger() }},
@@ -34,17 +36,12 @@ func setupTestContainer(t *testing.T) *dig.Container {
 	}
 
 	for _, p := range providers {
-		if err := c.Provide(p.provider); err != nil {
-			t.Fatalf("provide %s: %v", p.name, err)
-		}
+		err := c.Provide(p.provider)
+		require.NoErrorf(t, err, "provide %s", p.name)
 	}
 
-	if err := registerService(c); err != nil {
-		t.Fatalf("registerService error: %v", err)
-	}
-	if err := registerHTTP(c); err != nil {
-		t.Fatalf("registerHTTP error: %v", err)
-	}
+	require.NoError(t, registerService(c))
+	require.NoError(t, registerHTTP(c))
 
 	return c
 }
@@ -52,38 +49,24 @@ func setupTestContainer(t *testing.T) *dig.Container {
 func verifyServer(t *testing.T, srv *http.Server) {
 	t.Helper()
 
-	if srv == nil {
-		t.Fatal("http.Server is nil")
-	}
-	if srv.Addr != ":8080" {
-		t.Fatalf("expected server Addr ':8080', got %q", srv.Addr)
-	}
-	if srv.ReadHeaderTimeout <= 0 {
-		t.Fatalf("expected positive ReadHeaderTimeout, got %v", srv.ReadHeaderTimeout)
-	}
-	if srv.ReadTimeout <= 0 {
-		t.Fatalf("expected positive ReadTimeout, got %v", srv.ReadTimeout)
-	}
-	if srv.WriteTimeout <= 0 {
-		t.Fatalf("expected positive WriteTimeout, got %v", srv.WriteTimeout)
-	}
-	if srv.IdleTimeout <= 0 {
-		t.Fatalf("expected positive IdleTimeout, got %v", srv.IdleTimeout)
-	}
+	require.NotNil(t, srv, "http.Server is nil")
+	require.Equal(t, ":8080", srv.Addr)
+	require.Greater(t, srv.ReadHeaderTimeout, time.Duration(0))
+	require.Greater(t, srv.ReadTimeout, time.Duration(0))
+	require.Greater(t, srv.WriteTimeout, time.Duration(0))
+	require.Greater(t, srv.IdleTimeout, time.Duration(0))
 }
 
-func verifyHandlers(t *testing.T, base *handlers.Handlers, courierHandler *handlers.CourierHandler, deliveryHandler *handlers.DeliveryHandler) {
+func verifyHandlers(t *testing.T,
+	base *handlers.Handlers,
+	courierHandler *handlers.CourierHandler,
+	deliveryHandler *handlers.DeliveryHandler,
+) {
 	t.Helper()
 
-	if base == nil {
-		t.Fatal("*handlers.Handlers is nil")
-	}
-	if courierHandler == nil {
-		t.Fatal("*handlers.CourierHandler is nil")
-	}
-	if deliveryHandler == nil {
-		t.Fatal("*handlers.DeliveryHandler is nil")
-	}
+	require.NotNil(t, base)
+	require.NotNil(t, courierHandler)
+	require.NotNil(t, deliveryHandler)
 }
 
 func TestRegisterServiceAndHTTP_ProvidesHttpServerAndHandlers(t *testing.T) {
@@ -100,9 +83,7 @@ func TestRegisterServiceAndHTTP_ProvidesHttpServerAndHandlers(t *testing.T) {
 		verifyServer(t, srv)
 		verifyHandlers(t, base, courierHandler, deliveryHandler)
 	})
-	if err != nil {
-		t.Fatalf("Invoke failed: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestProvideAll_Success(t *testing.T) {
@@ -114,21 +95,13 @@ func TestProvideAll_Success(t *testing.T) {
 		func() context.Context { return context.Background() },
 		func() time.Duration { return 3 * time.Second },
 	)
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	require.NoError(t, err)
 
 	err = c.Invoke(func(ctx context.Context, d time.Duration) {
-		if ctx == nil {
-			t.Fatalf("context is nil")
-		}
-		if d != 3*time.Second {
-			t.Fatalf("expected 3s, got %v", d)
-		}
+		require.NotNil(t, ctx)
+		require.Equal(t, 3*time.Second, d)
 	})
-	if err != nil {
-		t.Fatalf("Invoke failed: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestProvideAll_InvalidProvider(t *testing.T) {
@@ -138,7 +111,129 @@ func TestProvideAll_InvalidProvider(t *testing.T) {
 
 	type bad struct{}
 	err := provideAll(c, bad{})
-	if err == nil {
-		t.Fatal("expected error for invalid provider, got nil")
+	require.Error(t, err)
+}
+
+func TestRegisterCore_ProvidesDependencies(t *testing.T) {
+	t.Parallel()
+
+	c := dig.New()
+	ctx := context.Background()
+
+	err := registerCore(c, ctx)
+	require.NoError(t, err)
+
+	err = c.Invoke(func(
+		gotCtx context.Context,
+		logger *log.Logger,
+		cfg *config.Config,
+		interval autoReleaseInterval,
+	) {
+		require.Equal(t, ctx, gotCtx)
+		require.NotNil(t, logger)
+		require.NotNil(t, cfg)
+		require.Equal(t, autoReleaseInterval(cfg.Delivery.AutoReleaseInterval), interval)
+	})
+	require.NoError(t, err)
+}
+
+func TestRegisterDb_UsesDbConnectAndProvidesPool(t *testing.T) {
+	t.Parallel()
+
+	c := dig.New()
+	ctx := context.Background()
+
+	cfg := &config.Config{
+		DB: config.DB{
+			Host: "localhost",
+			Port: "5432",
+			User: "user",
+			Pass: "pass",
+			Name: "db",
+		},
 	}
+
+	require.NoError(t, c.Provide(func() context.Context { return ctx }))
+	require.NoError(t, c.Provide(func() *config.Config { return cfg }))
+
+	stubPool := &pgxpool.Pool{}
+
+	stubConnect := func(
+		gotCtx context.Context,
+		dsn string,
+		retries int,
+		delay time.Duration,
+	) (*pgxpool.Pool, error) {
+		require.Equal(t, ctx, gotCtx)
+		require.Equal(t, cfg.DB.DSN(), dsn)
+		require.Equal(t, 10, retries)
+		require.Equal(t, time.Second, delay)
+		return stubPool, nil
+	}
+
+	err := registerDb(c, stubConnect)
+	require.NoError(t, err)
+
+	err = c.Invoke(func(pool *pgxpool.Pool) {
+		require.Equal(t, stubPool, pool)
+	})
+	require.NoError(t, err)
+}
+
+func TestContainerBuilder_Build_Success(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	builder := NewContainerBuilder().
+		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+			return &pgxpool.Pool{}, nil
+		})
+
+	c, err := builder.build(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, c)
+
+	err = c.Invoke(func(pool *pgxpool.Pool) {
+		require.NotNil(t, pool)
+	})
+	require.NoError(t, err)
+}
+
+func TestContainerBuilder_Build_DBError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	builder := NewContainerBuilder().
+		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+			return nil, fmt.Errorf("db failed")
+		})
+
+	c, err := builder.build(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, c)
+
+	err = c.Invoke(func(pool *pgxpool.Pool) {
+		_ = pool
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "db failed")
+}
+
+func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	builder := NewContainerBuilder().
+		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+			return &pgxpool.Pool{}, nil
+		}).
+		WithLogFatalf(func(format string, args ...interface{}) {
+			require.FailNowf(t, "logFatalf must not be called", format, args...)
+		})
+
+	c := builder.MustBuild(ctx)
+	require.NotNil(t, c)
 }

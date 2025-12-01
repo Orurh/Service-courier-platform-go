@@ -1,181 +1,237 @@
-package courier
+package courier_test
 
 import (
-	"errors"
+	"context"
 	"testing"
+	"time"
+
+	gomock "github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/service/courier"
 )
 
-func TestValidateCreate_NilCourier(t *testing.T) {
+func TestService_Create_Validation(t *testing.T) {
 	t.Parallel()
-	err := validateCreate(nil)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for nil courier, got %v", err)
+
+	tests := []struct {
+		name    string
+		courier *domain.Courier
+		wantErr bool
+	}{
+		{
+			name:    "nil courier",
+			courier: nil,
+			wantErr: true,
+		},
+		{
+			name: "empty name",
+			courier: &domain.Courier{
+				Name:          "    ",
+				Phone:         "+70000000000",
+				Status:        domain.StatusAvailable,
+				TransportType: domain.TransportTypeFoot,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid phone",
+			courier: &domain.Courier{
+				Name:          "Artem",
+				Phone:         "123",
+				Status:        domain.StatusAvailable,
+				TransportType: domain.TransportTypeFoot,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid status",
+			courier: &domain.Courier{
+				Name:          "Artem",
+				Phone:         "+70000000000",
+				Status:        domain.CourierStatus("boom"),
+				TransportType: domain.TransportTypeFoot,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid transport type",
+			courier: &domain.Courier{
+				Name:          "Artem",
+				Phone:         "+70000000000",
+				Status:        domain.StatusAvailable,
+				TransportType: domain.CourierTransportType("teleport"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid courier",
+			courier: &domain.Courier{
+				Name:          "Artem",
+				Phone:         "+70000000000",
+				Status:        domain.StatusAvailable,
+				TransportType: domain.TransportTypeFoot,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+
+			repo := NewMockcourierRepository(ctrl)
+
+			if !tt.wantErr {
+				repo.EXPECT().
+					Create(gomock.Any(), gomock.Any()).
+					Return(int64(123), nil)
+			}
+
+			svc := courier.NewService(repo, time.Second)
+
+			id, err := svc.Create(context.Background(), tt.courier)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, apperr.ErrInvalid)
+				require.Zero(t, id)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, int64(123), id)
+			}
+		})
 	}
 }
 
-func TestValidateCreate_EmptyName(t *testing.T) {
-	t.Parallel()
-	c := &domain.Courier{
-		Name:          "    ",
-		Phone:         "+70000000000",
-		Status:        domain.StatusAvailable,
-		TransportType: domain.TransportTypeFoot,
-	}
-	err := validateCreate(c)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for empty name, got %v", err)
-	}
-}
+func ptr[T any](v T) *T { return &v }
 
-func TestValidateCreate_InvalidPhone(t *testing.T) {
-	t.Parallel()
-	c := &domain.Courier{
-		Name:          "Artem",
-		Phone:         "123",
-		Status:        domain.StatusAvailable,
-		TransportType: domain.TransportTypeFoot,
-	}
-	err := validateCreate(c)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad phone, got %v", err)
-	}
-}
-
-func TestValidateCreate_InvalidStatus(t *testing.T) {
-	t.Parallel()
-	c := &domain.Courier{
-		Name:          "Artem",
-		Phone:         "+70000000000",
-		Status:        domain.CourierStatus("boom"),
-		TransportType: domain.TransportTypeFoot,
-	}
-	err := validateCreate(c)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad status, got %v", err)
-	}
-}
-
-func TestValidateCreate_InvalidTransportType(t *testing.T) {
-	t.Parallel()
-	c := &domain.Courier{
-		Name:          "Artem",
-		Phone:         "+70000000000",
-		Status:        domain.StatusAvailable,
-		TransportType: domain.CourierTransportType("teleport"),
-	}
-	err := validateCreate(c)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad transport type, got %v", err)
-	}
-}
-
-func TestValidateCreate_ValidCourier(t *testing.T) {
-	t.Parallel()
-	c := &domain.Courier{
-		Name:          "Artem",
-		Phone:         "+70000000000",
-		Status:        domain.StatusAvailable,
-		TransportType: domain.TransportTypeFoot,
-	}
-	if err := validateCreate(c); err != nil {
-		t.Fatalf("expected nil error for valid courier, got %v", err)
-	}
-}
-
-func TestValidateUpdate_IdLessOrEqualZero(t *testing.T) {
-	t.Parallel()
-	u := &domain.PartialCourierUpdate{
-		ID: 0,
-	}
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for id <= 0, got %v", err)
-	}
-}
-
-func TestValidateUpdate_AllFieldsNil(t *testing.T) {
-	t.Parallel()
-	u := &domain.PartialCourierUpdate{
-		ID: 1,
-	}
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid when all fields nil, got %v", err)
-	}
-}
-
-func TestValidateUpdate_EmptyName(t *testing.T) {
-	t.Parallel()
-	name := "   "
-	u := &domain.PartialCourierUpdate{
-		ID:   1,
-		Name: &name,
-	}
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for empty name, got %v", err)
-	}
-}
-
-func TestValidateUpdate_InvalidPhone(t *testing.T) {
-	t.Parallel()
-	phone := "123"
-	u := &domain.PartialCourierUpdate{
-		ID:    1,
-		Phone: &phone,
-	}
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad phone, got %v", err)
-	}
-}
-
-func TestValidateUpdate_InvalidStatus(t *testing.T) {
-	t.Parallel()
-	status := domain.CourierStatus("bad")
-	u := &domain.PartialCourierUpdate{
-		ID:     1,
-		Status: &status,
-	}
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad status, got %v", err)
-	}
-}
-
-func TestValidateUpdate_InvalidTransportType(t *testing.T) {
+func TestService_Update_Validation(t *testing.T) {
 	t.Parallel()
 
-	transportType := domain.CourierTransportType("teleport")
-	u := &domain.PartialCourierUpdate{
-		ID:            1,
-		TransportType: &transportType,
+	validStatus := domain.StatusAvailable
+	busyStatus := domain.StatusBusy
+	footTransport := domain.TransportTypeFoot
+	carTransport := domain.TransportTypeCar
+
+	invalidStatus := domain.CourierStatus("bad")
+	invalidTransport := domain.CourierTransportType("teleport")
+
+	tests := []struct {
+		name    string
+		update  *domain.PartialCourierUpdate
+		wantErr bool
+	}{
+		{
+			name: "id <= 0",
+			update: &domain.PartialCourierUpdate{
+				ID: 0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "all fields nil",
+			update: &domain.PartialCourierUpdate{
+				ID: 1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty name",
+			update: &domain.PartialCourierUpdate{
+				ID:   1,
+				Name: ptr("   "),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid phone",
+			update: &domain.PartialCourierUpdate{
+				ID:    1,
+				Phone: ptr("123"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid status",
+			update: &domain.PartialCourierUpdate{
+				ID:     1,
+				Status: &invalidStatus,
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid transport type",
+			update: &domain.PartialCourierUpdate{
+				ID:            1,
+				TransportType: &invalidTransport,
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid update with all fields",
+			update: &domain.PartialCourierUpdate{
+				ID:            1,
+				Name:          ptr("Artem"),
+				Phone:         ptr("+70000000000"),
+				Status:        &validStatus,
+				TransportType: &footTransport,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid update with different status",
+			update: &domain.PartialCourierUpdate{
+				ID:            1,
+				Status:        &busyStatus,
+				TransportType: &footTransport,
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid update with different transport type",
+			update: &domain.PartialCourierUpdate{
+				ID:            1,
+				Status:        &validStatus,
+				TransportType: &carTransport,
+			},
+			wantErr: false,
+		},
 	}
 
-	err := validateUpdate(u)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad transport type, got %v", err)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-func TestValidateUpdate_ValidUpdatePasses(t *testing.T) {
-	t.Parallel()
-	name := "Artem"
-	phone := "+70000000000"
-	status := domain.StatusAvailable
-	tt := domain.TransportTypeFoot
+			ctrl := gomock.NewController(t)
 
-	u := &domain.PartialCourierUpdate{
-		ID:            1,
-		Name:          &name,
-		Phone:         &phone,
-		Status:        &status,
-		TransportType: &tt,
-	}
-	if err := validateUpdate(u); err != nil {
-		t.Fatalf("expected nil error for valid update, got %v", err)
+			repo := NewMockcourierRepository(ctrl)
+
+			if !tt.wantErr {
+				repo.EXPECT().
+					UpdatePartial(gomock.Any(), gomock.Any()).
+					Return(true, nil)
+			}
+
+			svc := courier.NewService(repo, time.Second)
+
+			update := domain.PartialCourierUpdate{}
+			if tt.update != nil {
+				update = *tt.update
+			}
+
+			ok, err := svc.UpdatePartial(context.Background(), update)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, apperr.ErrInvalid)
+				require.False(t, ok)
+			} else {
+				require.NoError(t, err)
+				require.True(t, ok)
+			}
+		})
 	}
 }

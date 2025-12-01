@@ -1,32 +1,70 @@
-package handlers
+package handlers_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"course-go-avito-Orurh/internal/http/handlers"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandlers_Ping(t *testing.T) {
 	t.Parallel()
 
-	h := New(nil)
+	h := handlers.New(nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	rr := httptest.NewRecorder()
 
 	h.Ping(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 
 	var body map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
-		t.Fatalf("failed to decode body: %v", err)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
 
-	if body["message"] != "pong" {
-		t.Fatalf(`expected message "pong", got %q`, body["message"])
-	}
+	require.Equal(t, "pong", body["message"])
+}
+
+func TestHandlers_HealthcheckHead(t *testing.T) {
+	t.Parallel()
+
+	h := handlers.New(nil)
+
+	req := httptest.NewRequest(http.MethodHead, "/healthcheck", nil)
+	rr := httptest.NewRecorder()
+
+	h.HealthcheckHead(rr, req)
+
+	require.Equal(t, http.StatusNoContent, rr.Code)
+	require.Empty(t, rr.Body.String(), "HEAD request should not have a body")
+}
+
+func TestHandlers_NotFound(t *testing.T) {
+	t.Parallel()
+
+	h := handlers.New(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/nonexistent-route", nil)
+	rr := httptest.NewRecorder()
+
+	h.NotFound(rr, req)
+
+	require.Equal(t, http.StatusNotFound, rr.Code)
+
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
+	require.Contains(t, body["error"], "route not found")
+}
+
+func TestHandlers_New_WithNilLogger(t *testing.T) {
+	t.Parallel()
+
+	h := handlers.New(nil)
+
+	require.NotNil(t, h)
+	require.NotNil(t, h.Logger)
 }

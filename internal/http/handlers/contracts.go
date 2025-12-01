@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"context"
+
 	"course-go-avito-Orurh/internal/domain"
 	"course-go-avito-Orurh/internal/service/courier"
 	"course-go-avito-Orurh/internal/service/delivery"
 )
 
-// сourierUsecase exposes courier-related business operations to the HTTP layer.
+// courierUsecase exposes courier-related business operations to the HTTP layer.
 type courierUsecase interface {
 	Get(ctx context.Context, id int64) (*domain.Courier, error)
 	List(ctx context.Context, limit, offset *int) ([]domain.Courier, error)
@@ -17,7 +18,7 @@ type courierUsecase interface {
 
 // NewCourierUsecase wires a CourierService into a courierUsecase.
 func NewCourierUsecase(service *courier.Service) courierUsecase {
-	return service // CourierService реализует все методы интерфейса
+	return service
 }
 
 type deliveryUsecase interface {

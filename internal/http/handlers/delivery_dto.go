@@ -15,8 +15,6 @@ type assignDeliveryResponse struct {
 	DeliveryDeadline time.Time `json:"delivery_deadline"`
 }
 
-// POST /delivery/unassign
-// запрос: { "order_id": "..." }
 type unassignDeliveryRequest struct {
 	OrderID string `json:"order_id"`
 }

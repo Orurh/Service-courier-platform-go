@@ -1,18 +1,18 @@
 //go:build integration
+
 package repository_test
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/suite"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
 	"course-go-avito-Orurh/internal/repository"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/stretchr/testify/suite"
 )
 
 type CourierRepositorySuite struct {
@@ -22,23 +22,10 @@ type CourierRepositorySuite struct {
 }
 
 func (s *CourierRepositorySuite) SetupSuite() {
-	dsn := os.Getenv("TEST_DB_DSN")
-	s.Require().NotEmpty(dsn, "TEST_DB_DSN must be set")
+	s.Require().NotNil(tcPool, "tcPool must be initialized in TestMain")
 
-	ctx := context.Background()
-
-	pool, err := pgxpool.New(ctx, dsn)
-	s.Require().NoError(err)
-	s.Require().NoError(pool.Ping(ctx))
-
-	s.pool = pool
-	s.repo = repository.NewCourierRepo(pool)
-}
-
-func (s *CourierRepositorySuite) TearDownSuite() {
-	if s.pool != nil {
-		s.pool.Close()
-	}
+	s.pool = tcPool
+	s.repo = repository.NewCourierRepo(tcPool)
 }
 
 func (s *CourierRepositorySuite) SetupTest() {
@@ -90,7 +77,7 @@ func (s *CourierRepositorySuite) TestCreate_IsDublicate() {
 	s.Require().NoError(err)
 
 	_, err2 := s.repo.Create(ctx, in2)
-	s.ErrorIs(err2, apperr.Conflict, "conflict conflict for dublicate phone")
+	s.ErrorIs(err2, apperr.ErrConflict, "conflict conflict for dublicate phone")
 }
 
 func (s *CourierRepositorySuite) TestGetNotFound() {
@@ -182,7 +169,7 @@ func (s *CourierRepositorySuite) TestUpdatePartial_IsDublicate() {
 	ok, err := s.repo.UpdatePartial(ctx, update)
 	s.False(ok, "row must not be marked as updated on duplicate")
 	s.Error(err)
-	s.ErrorIs(err, apperr.Conflict, "expected apperr.Conflict on duplicate phone")
+	s.ErrorIs(err, apperr.ErrConflict, "expected apperr.ErrConflict on duplicate phone")
 }
 func TestCourierRepositorySuite(t *testing.T) {
 	suite.Run(t, new(CourierRepositorySuite))

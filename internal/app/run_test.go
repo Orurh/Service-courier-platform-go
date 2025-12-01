@@ -8,16 +8,16 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/dig"
+
 	"course-go-avito-Orurh/internal/domain"
 	"course-go-avito-Orurh/internal/service/delivery"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/dig"
 )
 
 type fakeDeliveryRepo struct {
@@ -25,28 +25,8 @@ type fakeDeliveryRepo struct {
 	releaseCalls int
 }
 
-func (f *fakeDeliveryRepo) BeginTx(ctx context.Context) (delivery.Tx, error) {
-	return nil, nil
-}
-
-func (f *fakeDeliveryRepo) FindAvailableCourierForUpdate(ctx context.Context, tx delivery.Tx) (*domain.Courier, error) {
-	panic("not used in tests")
-}
-
-func (f *fakeDeliveryRepo) UpdateCourierStatus(ctx context.Context, tx delivery.Tx, id int64, status string) error {
-	panic("not used in tests")
-}
-
-func (f *fakeDeliveryRepo) InsertDelivery(ctx context.Context, tx delivery.Tx, d *domain.Delivery) error {
-	panic("not used in tests")
-}
-
-func (f *fakeDeliveryRepo) GetByOrderID(ctx context.Context, tx delivery.Tx, orderID string) (*domain.Delivery, error) {
-	panic("not used in tests")
-}
-
-func (f *fakeDeliveryRepo) DeleteByOrderID(ctx context.Context, tx delivery.Tx, orderID string) error {
-	panic("not used in tests")
+func (f *fakeDeliveryRepo) WithTx(ctx context.Context, fn func(delivery.TxRepository) error) error {
+	return nil
 }
 
 func (f *fakeDeliveryRepo) ReleaseCouriers(ctx context.Context, now time.Time) (int64, error) {
@@ -84,9 +64,7 @@ func TestStartAutoReleaseLoop_CallsReleaseExpired(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 
-	if repo.ReleaseCalls() == 0 {
-		t.Fatalf("expected ReleaseCouriers to be called at least once, got 0")
-	}
+	require.Greater(t, repo.ReleaseCalls(), 0)
 }
 
 func TestWaitForShutdown_LogsOnCtxDone(t *testing.T) {
@@ -109,12 +87,9 @@ func TestWaitForShutdown_LogsOnCtxDone(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("waitForShutdown did not return after cancel")
+		require.FailNow(t, "waitForShutdown did not return after cancel")
 	}
-
-	if !bytes.Contains(buf.Bytes(), []byte("shutting down service-courier")) {
-		t.Fatalf("expected shutdown log, got %q", buf.String())
-	}
+	require.Contains(t, buf.String(), "shutting down service-courier")
 }
 
 func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
@@ -126,7 +101,9 @@ func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
 	}
 	logger := log.New(io.Discard, "", 0)
 
-	gracefulShutdown(srv, logger, 100*time.Millisecond)
+	require.NotPanics(t, func() {
+		gracefulShutdown(srv, logger, 100*time.Millisecond)
+	})
 }
 
 func TestCloseResources_DoesNotPanic(t *testing.T) {
@@ -139,7 +116,9 @@ func TestCloseResources_DoesNotPanic(t *testing.T) {
 	var pool *pgxpool.Pool
 	logger := log.New(io.Discard, "", 0)
 
-	closeResources(pool, srv, logger)
+	require.NotPanics(t, func() {
+		closeResources(pool, srv, logger)
+	})
 }
 
 func TestAppRun_FullFlow_WithCancelledCtx(t *testing.T) {
@@ -163,9 +142,8 @@ func TestAppRun_FullFlow_WithCancelledCtx(t *testing.T) {
 		cancel()
 	}()
 
-	if err := appRun(srv, ctx, pool, logger, svc); err != nil {
-		t.Fatalf("appRun returned error: %v", err)
-	}
+	err := appRun(srv, ctx, pool, logger, svc, autoReleaseInterval(10*time.Millisecond))
+	require.NoError(t, err)
 }
 
 func TestMustRun_ShutdownRequested(t *testing.T) {
@@ -181,13 +159,11 @@ func TestMustRun_ShutdownRequested(t *testing.T) {
 			logged = fmt.Sprint(v...)
 		},
 		logFatalf: func(string, ...any) {
-			t.Fatalf("logFatalf must not be called for context.Canceled")
+			require.FailNow(t, "logFatalf must not be called for context. Canceled")
 		},
 	}
 	r.MustRun(nil)
-	if !strings.Contains(logged, "shutdown requested") {
-		t.Fatalf("expected shutdown log, got %q", logged)
-	}
+	require.Contains(t, logged, "shutdown requested")
 }
 
 func TestRunner_MustRun_StartupTimeout(t *testing.T) {
@@ -203,15 +179,13 @@ func TestRunner_MustRun_StartupTimeout(t *testing.T) {
 			logged = fmt.Sprint(v...)
 		},
 		logFatalf: func(string, ...any) {
-			t.Fatalf("logFatalf must not be called for context.DeadlineExceeded")
+			require.FailNow(t, "logFatalf must not be called for context.Canceled")
 		},
 	}
 
 	r.MustRun(nil)
 
-	if !strings.Contains(logged, "startup aborted: startup timeout exceeded") {
-		t.Fatalf("expected startup timeout log, got %q", logged)
-	}
+	require.Contains(t, logged, "startup aborted: startup timeout exceeded")
 }
 
 func TestRunner_MustRun_FatalOnOtherErrors(t *testing.T) {
@@ -224,17 +198,72 @@ func TestRunner_MustRun_FatalOnOtherErrors(t *testing.T) {
 			return errors.New("boom")
 		},
 		logPrintln: func(...any) {
-			t.Fatalf("logPrintln must not be called for generic error")
+			require.FailNow(t, "logPrintln must not be called for generic error")
 		},
 		logFatalf: func(format string, args ...any) {
 			logged = fmt.Sprintf(format, args...)
-			//  os.Exit // убрал, чтобы не завершался
 		},
 	}
 
 	r.MustRun(nil)
+	require.Equal(t, "run error: boom", logged)
+}
 
-	if !strings.Contains(logged, "run error: boom") {
-		t.Fatalf("expected fatal log with error, got %q", logged)
-	}
+func TestNewRunner_DefaultFields(t *testing.T) {
+	t.Parallel()
+
+	r := NewRunner()
+	require.NotNil(t, r)
+
+	require.NotNil(t, r.runFn)
+	require.NotNil(t, r.logPrintln)
+	require.NotNil(t, r.logFatalf)
+	require.Equal(t, fmt.Sprintf("%p", run), fmt.Sprintf("%p", r.runFn))
+	require.Equal(t, fmt.Sprintf("%p", log.Println), fmt.Sprintf("%p", r.logPrintln))
+	require.Equal(t, fmt.Sprintf("%p", log.Fatalf), fmt.Sprintf("%p", r.logFatalf))
+}
+
+func TestRun_InvokesAppRunViaContainer(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	container := dig.New()
+
+	require.NoError(t, container.Provide(func() context.Context {
+		return ctx
+	}))
+
+	require.NoError(t, container.Provide(func() *log.Logger {
+		return log.New(io.Discard, "", 0)
+	}))
+
+	require.NoError(t, container.Provide(func() *pgxpool.Pool {
+		return nil
+	}))
+
+	require.NoError(t, container.Provide(func() *http.Server {
+		return &http.Server{
+			Addr:    "127.0.0.1:0",
+			Handler: http.NewServeMux(),
+		}
+	}))
+
+	require.NoError(t, container.Provide(func() autoReleaseInterval {
+		return autoReleaseInterval(10 * time.Millisecond)
+	}))
+
+	require.NoError(t, container.Provide(func() *delivery.Service {
+		repo := &fakeDeliveryRepo{}
+		return delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second)
+	}))
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err := run(container)
+	require.NoError(t, err)
 }

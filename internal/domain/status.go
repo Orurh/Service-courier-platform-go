@@ -45,7 +45,6 @@ func (t CourierTransportType) Valid() bool {
 	return false
 }
 
-// rePhone is a regex to validate phone numbers
 var rePhone = regexp.MustCompile(`^\+[0-9]{11}$`)
 
 // ValidatePhone validates the phone number format

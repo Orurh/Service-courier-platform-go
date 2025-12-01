@@ -2,10 +2,11 @@ package delivery
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/apperr"
-	"course-go-avito-Orurh/internal/domain"
 	"strings"
 	"time"
+
+	"course-go-avito-Orurh/internal/apperr"
+	"course-go-avito-Orurh/internal/domain"
 )
 
 // Service - service for assigning deliveries to couriers.
@@ -37,53 +38,55 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 	if err != nil {
 		return domain.AssignResult{}, err
 	}
+
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
-	tx, err := s.repo.BeginTx(ctx)
+	var result domain.AssignResult
+
+	err = s.repo.WithTx(ctx, func(tx TxRepository) error {
+		courier, err := tx.FindAvailableCourierForUpdate(ctx)
+		if err != nil {
+			return err
+		}
+		if courier == nil {
+			return apperr.ErrConflict
+		}
+
+		now := time.Now().UTC()
+		deadline, err := s.factory.Deadline(domain.CourierTransportType(courier.TransportType), now)
+		if err != nil {
+			return err
+		}
+
+		d := &domain.Delivery{
+			CourierID:  courier.ID,
+			OrderID:    orderID,
+			AssignedAt: now,
+			Deadline:   deadline,
+		}
+		if err := tx.InsertDelivery(ctx, d); err != nil {
+			return err
+		}
+
+		if err := tx.UpdateCourierStatus(ctx, courier.ID, domain.StatusBusy); err != nil {
+			return err
+		}
+
+		result = domain.AssignResult{
+			CourierID:     courier.ID,
+			OrderID:       orderID,
+			TransportType: courier.TransportType,
+			Deadline:      deadline,
+		}
+
+		return nil
+	})
 	if err != nil {
 		return domain.AssignResult{}, err
 	}
-	defer tx.Rollback(ctx)
 
-	courier, err := s.repo.FindAvailableCourierForUpdate(ctx, tx)
-	if err != nil {
-		return domain.AssignResult{}, err
-	}
-	if courier == nil {
-		return domain.AssignResult{}, apperr.Conflict
-	}
-
-	now := time.Now().UTC()
-	deadline, err := s.factory.Deadline(domain.CourierTransportType(courier.TransportType), now)
-	if err != nil {
-		return domain.AssignResult{}, err
-	}
-
-	d := &domain.Delivery{
-		CourierID:  courier.ID,
-		OrderID:    orderID,
-		AssignedAt: now,
-		Deadline:   deadline,
-	}
-	if err := s.repo.InsertDelivery(ctx, tx, d); err != nil {
-		return domain.AssignResult{}, err
-	}
-
-	if err := s.repo.UpdateCourierStatus(ctx, tx, courier.ID, string(domain.StatusBusy)); err != nil {
-		return domain.AssignResult{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.AssignResult{}, err
-	}
-
-	return domain.AssignResult{
-		CourierID:     courier.ID,
-		OrderID:       orderID,
-		TransportType: courier.TransportType,
-		Deadline:      deadline,
-	}, nil
+	return result, nil
 }
 
 // Unassign unassigns a delivery from a courier.
@@ -96,43 +99,44 @@ func (s *Service) Unassign(ctx context.Context, orderID string) (domain.Unassign
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
-	tx, err := s.repo.BeginTx(ctx)
+	var result domain.UnassignResult
+
+	err = s.repo.WithTx(ctx, func(tx TxRepository) error {
+		d, err := tx.GetByOrderID(ctx, orderID)
+		if err != nil {
+			return err
+		}
+		if d == nil {
+			return apperr.ErrNotFound
+		}
+
+		if err := tx.DeleteByOrderID(ctx, orderID); err != nil {
+			return err
+		}
+
+		if err := tx.UpdateCourierStatus(ctx, d.CourierID, domain.StatusAvailable); err != nil {
+			return err
+		}
+
+		result = domain.UnassignResult{
+			CourierID: d.CourierID,
+			OrderID:   orderID,
+			Status:    "unassigned",
+		}
+
+		return nil
+	})
 	if err != nil {
 		return domain.UnassignResult{}, err
 	}
-	defer tx.Rollback(ctx)
 
-	d, err := s.repo.GetByOrderID(ctx, tx, orderID)
-	if err != nil {
-		return domain.UnassignResult{}, err
-	}
-	if d == nil {
-		return domain.UnassignResult{}, apperr.NotFound
-	}
-
-	if err := s.repo.DeleteByOrderID(ctx, tx, orderID); err != nil {
-		return domain.UnassignResult{}, err
-	}
-
-	if err := s.repo.UpdateCourierStatus(ctx, tx, d.CourierID, string(domain.StatusAvailable)); err != nil {
-		return domain.UnassignResult{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return domain.UnassignResult{}, err
-	}
-
-	return domain.UnassignResult{
-		CourierID: d.CourierID,
-		OrderID:   orderID,
-		Status:    "unassigned",
-	}, nil
+	return result, nil
 }
 
 func validateOrderID(raw string) (string, error) {
 	orderID := strings.TrimSpace(raw)
 	if orderID == "" {
-		return "", apperr.Invalid
+		return "", apperr.ErrInvalid
 	}
 	return orderID, nil
 }

@@ -6,15 +6,20 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 )
 
+var flagsMu sync.Mutex
+
 // Config stores HTTP service settings.
 type Config struct {
-	Port int
-	DB   DB
+	Port     int
+	DB       DB
+	Delivery Delivery
 }
 
 // DB stores database settings.
@@ -24,6 +29,11 @@ type DB struct {
 	User string
 	Pass string
 	Name string
+}
+
+// Delivery stores delivery-related settings.
+type Delivery struct {
+	AutoReleaseInterval time.Duration
 }
 
 // DSN returns database connection string.
@@ -42,6 +52,8 @@ func envOrDefault(key, def string) string {
 
 // Load reads configuration in order: .env (if present) → environment → flags.
 func Load() (*Config, error) {
+	flagsMu.Lock()
+	defer flagsMu.Unlock()
 	if err := godotenv.Load(".env"); err != nil {
 		log.Printf("warning: .env not loaded: %v", err)
 	}
@@ -78,5 +90,15 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid POSTGRES_PORT: %q", db.Port)
 	}
 
-	return &Config{Port: port, DB: db}, nil
+	intervalStr := envOrDefault("DELIVERY_AUTO_RELEASE_INTERVAL", "10s")
+	autoReleaseInterval, err := time.ParseDuration(intervalStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid DELIVERY_AUTO_RELEASE_INTERVAL %q: %w", intervalStr, err)
+	}
+
+	deliveryCfg := Delivery{
+		AutoReleaseInterval: autoReleaseInterval,
+	}
+
+	return &Config{Port: port, DB: db, Delivery: deliveryCfg}, nil
 }

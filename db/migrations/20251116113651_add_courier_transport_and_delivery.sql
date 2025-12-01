@@ -1,15 +1,7 @@
 -- +goose Up
-ALTER TABLE couriers
-    ADD COLUMN transport_type TEXT NOT NULL DEFAULT 'on_foot';
-
-CREATE TABLE delivery (
-    id          BIGSERIAL PRIMARY KEY,
-    courier_id  BIGINT NOT NULL,
-    order_id    VARCHAR(255) NOT NULL,
-    assigned_at TIMESTAMP NOT NULL DEFAULT now(),
-    deadline    TIMESTAMP NOT NULL
-);
+ALTER TABLE IF EXISTS couriers
+    ADD COLUMN IF NOT EXISTS transport_type TEXT NOT NULL DEFAULT 'on_foot';
 
 -- +goose Down
-DROP TABLE IF EXISTS delivery;
-ALTER TABLE couriers DROP COLUMN transport_type;
+ALTER TABLE IF EXISTS couriers
+    DROP COLUMN IF EXISTS transport_type;

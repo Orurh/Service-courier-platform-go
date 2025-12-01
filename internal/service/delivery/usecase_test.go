@@ -1,46 +1,32 @@
-package delivery
+package delivery_test
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/apperr"
-	"course-go-avito-Orurh/internal/domain"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+
+	"course-go-avito-Orurh/internal/apperr"
+	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/service/delivery"
 )
 
-func newTestDeliveryService(repo deliveryRepository, f TimeFactory) *Service {
-	return NewDeliveryService(repo, f, 3*time.Second)
-}
-
-func TestNewDeliveryService_ZeroTimeoutUsesDefault(t *testing.T) {
-	t.Parallel()
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	repo := NewMockdeliveryRepository(ctrl)
-	factory := NewMockTimeFactory(ctrl)
-
-	service := NewDeliveryService(repo, factory, 0)
-	if service.operationTimeout != 3*time.Second {
-		t.Fatalf("default timeout 3s, got %v", service.operationTimeout)
-	}
+func newTestDeliveryService(repo *MockdeliveryRepository, f delivery.TimeFactory) *delivery.Service {
+	return delivery.NewDeliveryService(repo, f, 3*time.Second)
 }
 
 func TestService_Assign_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	orderID := "order_1"
 
 	repo := NewMockdeliveryRepository(ctrl)
-	tx := NewMockTx(ctrl)
 	factory := NewMockTimeFactory(ctrl)
 
 	courier := &domain.Courier{
@@ -48,76 +34,48 @@ func TestService_Assign_Success(t *testing.T) {
 		TransportType: domain.TransportTypeFoot,
 	}
 	expectedDeadline := time.Date(2025, 1, 2, 15, 4, 5, 0, time.UTC)
-
-	tx.EXPECT().Rollback(gomock.Any()).AnyTimes()
-
 	repo.EXPECT().
-		BeginTx(gomock.Any()).
-		Return(tx, nil)
+		WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
 
-	repo.EXPECT().
-		FindAvailableCourierForUpdate(gomock.Any(), tx).
-		Return(courier, nil)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).Return(courier, nil)
 
-	factory.EXPECT().
-		Deadline(domain.TransportTypeFoot, gomock.Any()).
-		Return(expectedDeadline, nil)
+			factory.EXPECT().Deadline(domain.TransportTypeFoot, gomock.Any()).Return(expectedDeadline, nil)
 
-	repo.EXPECT().
-		InsertDelivery(gomock.Any(), tx, gomock.AssignableToTypeOf(&domain.Delivery{})).
-		DoAndReturn(func(ctx context.Context, gotTx Tx, d *domain.Delivery) error {
-			if d.CourierID != courier.ID {
-				t.Fatalf("expected inserted.CourierID %d, got %d", courier.ID, d.CourierID)
-			}
-			if d.OrderID != orderID {
-				t.Fatalf("expected inserted.OrderID %q, got %q", orderID, d.OrderID)
-			}
-			if !d.Deadline.Equal(expectedDeadline) {
-				t.Fatalf("expected inserted.Deadline %v, got %v", expectedDeadline, d.Deadline)
-			}
-			return nil
+			tx.EXPECT().InsertDelivery(gomock.Any(), gomock.AssignableToTypeOf(&domain.Delivery{})).
+				DoAndReturn(func(ctx context.Context, d *domain.Delivery) error {
+					require.Equal(t, courier.ID, d.CourierID)
+					require.Equal(t, orderID, d.OrderID)
+					require.True(t, d.Deadline.Equal(expectedDeadline))
+					return nil
+				})
+
+			tx.EXPECT().UpdateCourierStatus(gomock.Any(), courier.ID, domain.StatusBusy).Return(nil)
+
+			return fn(tx)
 		})
-
-	repo.EXPECT().
-		UpdateCourierStatus(gomock.Any(), tx, courier.ID, string(domain.StatusBusy)).
-		Return(nil)
-
-	tx.EXPECT().
-		Commit(gomock.Any()).
-		Return(nil)
 
 	service := newTestDeliveryService(repo, factory)
 
 	res, err := service.Assign(ctx, orderID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 
-	if res.CourierID != courier.ID {
-		t.Fatalf("expected CourierID %d, got %d", courier.ID, res.CourierID)
-	}
-	if res.OrderID != orderID {
-		t.Fatalf("expected OrderID %q, got %q", orderID, res.OrderID)
-	}
-	if res.TransportType != courier.TransportType {
-		t.Fatalf("expected TransportType %q, got %q", courier.TransportType, res.TransportType)
-	}
-	if !res.Deadline.Equal(expectedDeadline) {
-		t.Fatalf("expected Deadline %v, got %v", expectedDeadline, res.Deadline)
-	}
+	require.NoError(t, err)
+	require.Equal(t, courier.ID, res.CourierID)
+	require.Equal(t, orderID, res.OrderID)
+	require.Equal(t, courier.TransportType, res.TransportType)
+	require.True(t, res.Deadline.Equal(expectedDeadline))
 }
 
 func TestService_Unassign_Success(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	orderID := "order_1"
 
 	repo := NewMockdeliveryRepository(ctrl)
-	tx := NewMockTx(ctrl)
 
 	existing := &domain.Delivery{
 		ID:        100,
@@ -125,51 +83,33 @@ func TestService_Unassign_Success(t *testing.T) {
 		OrderID:   orderID,
 	}
 
-	tx.EXPECT().Rollback(gomock.Any()).AnyTimes()
-
 	repo.EXPECT().
-		BeginTx(gomock.Any()).
-		Return(tx, nil)
+		WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
 
-	repo.EXPECT().
-		GetByOrderID(gomock.Any(), tx, orderID).
-		Return(existing, nil)
+			tx.EXPECT().GetByOrderID(gomock.Any(), orderID).Return(existing, nil)
 
-	repo.EXPECT().
-		DeleteByOrderID(gomock.Any(), tx, orderID).
-		Return(nil)
+			tx.EXPECT().DeleteByOrderID(gomock.Any(), orderID).Return(nil)
 
-	repo.EXPECT().
-		UpdateCourierStatus(gomock.Any(), tx, existing.CourierID, string(domain.StatusAvailable)).
-		Return(nil)
+			tx.EXPECT().UpdateCourierStatus(gomock.Any(), existing.CourierID, domain.StatusAvailable).Return(nil)
 
-	tx.EXPECT().
-		Commit(gomock.Any()).
-		Return(nil)
+			return fn(tx)
+		})
 
 	service := newTestDeliveryService(repo, nil)
 
 	res, err := service.Unassign(ctx, orderID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if res.OrderID != orderID {
-		t.Fatalf("expected OrderID %q, got %q", orderID, res.OrderID)
-	}
-	if res.CourierID != existing.CourierID {
-		t.Fatalf("expected CourierID %d, got %d", existing.CourierID, res.CourierID)
-	}
-	if res.Status != "unassigned" {
-		t.Fatalf("expected Status %q, got %q", "unassigned", res.Status)
-	}
+	require.NoError(t, err)
+	require.Equal(t, orderID, res.OrderID)
+	require.Equal(t, existing.CourierID, res.CourierID)
+	require.Equal(t, "unassigned", res.Status)
 }
 
 func TestService_Assign_InvalidOrderID(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	badOrderID := "   "
@@ -180,19 +120,14 @@ func TestService_Assign_InvalidOrderID(t *testing.T) {
 	service := newTestDeliveryService(repo, factory)
 
 	res, err := service.Assign(ctx, badOrderID)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad orderID, got %v", err)
-	}
-	if res != (domain.AssignResult{}) {
-		t.Fatalf("expected zero AssignResult, got %#v", res)
-	}
+	require.ErrorIs(t, err, apperr.ErrInvalid)
+	require.Equal(t, domain.AssignResult{}, res)
 }
 
 func TestService_Assign_BeginTxError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	orderID := "order_1"
@@ -203,25 +138,18 @@ func TestService_Assign_BeginTxError(t *testing.T) {
 
 	txErr := errors.New("begin tx failed")
 
-	repo.EXPECT().
-		BeginTx(gomock.Any()).
-		Return(nil, txErr)
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).Return(txErr)
 
 	res, err := service.Assign(ctx, orderID)
 
-	if !errors.Is(err, txErr) {
-		t.Fatalf("expected BeginTx error %v, got %v", txErr, err)
-	}
-	if res != (domain.AssignResult{}) {
-		t.Fatalf("expected zero AssignResult, got %#v", res)
-	}
+	require.ErrorIs(t, err, txErr)
+	require.Equal(t, domain.AssignResult{}, res)
 }
 
 func TestService_Unassign_BeginTxError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	orderID := "order_1"
@@ -233,22 +161,16 @@ func TestService_Unassign_BeginTxError(t *testing.T) {
 
 	txErr := errors.New("tx error")
 
-	repo.EXPECT().
-		BeginTx(gomock.Any()).
-		Return(nil, txErr)
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).Return(txErr)
 
 	_, err := service.Unassign(ctx, orderID)
-	if !errors.Is(err, txErr) {
-		t.Fatalf("expected tx error, got %v", err)
-	}
+	require.ErrorIs(t, err, txErr)
 }
 
 func TestService_Unassign_InvalidOrderID(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	ctx := context.Background()
 	badOrderID := "   "
 
@@ -258,53 +180,43 @@ func TestService_Unassign_InvalidOrderID(t *testing.T) {
 	service := newTestDeliveryService(repo, factory)
 
 	res, err := service.Unassign(ctx, badOrderID)
-	if !errors.Is(err, apperr.Invalid) {
-		t.Fatalf("expected Invalid for bad orderID, got %v", err)
-	}
-	if res != (domain.UnassignResult{}) {
-		t.Fatalf("expected zero UnassignResult, got %#v", res)
-	}
+	require.ErrorIs(t, err, apperr.ErrInvalid)
+	require.Equal(t, domain.UnassignResult{}, res)
 }
 
 func TestService_Assign_NoCourierAvailable(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 	orderID := "order_1"
 
 	repo := NewMockdeliveryRepository(ctrl)
-	tx := NewMockTx(ctrl)
 	factory := NewMockTimeFactory(ctrl)
 
-	tx.EXPECT().Rollback(gomock.Any()).AnyTimes()
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
 
-	repo.EXPECT().
-		BeginTx(gomock.Any()).
-		Return(tx, nil)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).
+				Return(nil, nil)
 
-	repo.EXPECT().
-		FindAvailableCourierForUpdate(gomock.Any(), tx).
-		Return(nil, nil)
+			return fn(tx)
+		})
 
 	service := newTestDeliveryService(repo, factory)
 
 	res, err := service.Assign(ctx, orderID)
-	if !errors.Is(err, apperr.Conflict) {
-		t.Fatalf("expected apperr.Conflict, got %v", err)
-	}
-	if res != (domain.AssignResult{}) {
-		t.Fatalf("expected zero AssignResult, got %#v", res)
-	}
+
+	require.ErrorIs(t, err, apperr.ErrConflict)
+	require.Equal(t, domain.AssignResult{}, res)
 }
 
 func TestService_ReleaseExpired_RepoError(t *testing.T) {
 	t.Parallel()
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
 	ctx := context.Background()
 
@@ -312,22 +224,18 @@ func TestService_ReleaseExpired_RepoError(t *testing.T) {
 	factory := NewMockTimeFactory(ctrl)
 
 	wantErr := errors.New("boom")
-	repo.EXPECT().
-		ReleaseCouriers(gomock.Any(), gomock.Any()).
-		Return(int64(0), wantErr)
+	repo.EXPECT().ReleaseCouriers(gomock.Any(), gomock.Any()).Return(int64(0), wantErr)
 
 	svc := newTestDeliveryService(repo, factory)
 
 	err := svc.ReleaseExpired(ctx)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("expected %v, got %v", wantErr, err)
-	}
+	require.ErrorIs(t, err, wantErr)
 }
 
 func TestDefaultTimeFactory_Deadline(t *testing.T) {
 	t.Parallel()
 
-	f := NewTimeFactory()
+	f := delivery.NewTimeFactory()
 	now := time.Date(2025, 1, 2, 10, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -363,20 +271,311 @@ func TestDefaultTimeFactory_Deadline(t *testing.T) {
 			got, err := f.Deadline(tt.transport, now)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error for transport %q, got nil", tt.transport)
-				}
+				require.Error(t, err)
 				return
 			}
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			require.NoError(t, err)
 
 			want := now.Add(tt.wantDelta)
-			if !got.Equal(want) {
-				t.Fatalf("expected deadline %v, got %v", want, got)
-			}
+			require.Equal(t, want, got)
 		})
 	}
+}
+
+func TestService_Assign_FindAvailableCourierError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	wantErr := errors.New("find available courier error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).Return(nil, wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Assign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.AssignResult{}, res)
+}
+
+func TestService_Assign_DeadlineError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	courier := &domain.Courier{
+		ID:            10,
+		TransportType: domain.TransportTypeFoot,
+	}
+
+	wantErr := errors.New("deadline calculation error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).Return(courier, nil)
+			factory.EXPECT().Deadline(domain.TransportTypeFoot, gomock.Any()).Return(time.Time{}, wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Assign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.AssignResult{}, res)
+}
+
+func TestService_Assign_InsertDeliveryError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	courier := &domain.Courier{
+		ID:            10,
+		TransportType: domain.TransportTypeFoot,
+	}
+	expectedDeadline := time.Date(2025, 1, 2, 15, 4, 5, 0, time.UTC)
+
+	wantErr := errors.New("insert delivery error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).Return(courier, nil)
+			factory.EXPECT().Deadline(domain.TransportTypeFoot, gomock.Any()).Return(expectedDeadline, nil)
+			tx.EXPECT().InsertDelivery(gomock.Any(), gomock.Any()).Return(wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Assign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.AssignResult{}, res)
+}
+
+func TestService_Assign_UpdateCourierStatusError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	courier := &domain.Courier{
+		ID:            10,
+		TransportType: domain.TransportTypeFoot,
+	}
+	expectedDeadline := time.Date(2025, 1, 2, 15, 4, 5, 0, time.UTC)
+
+	wantErr := errors.New("update courier status error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().FindAvailableCourierForUpdate(gomock.Any()).Return(courier, nil)
+			factory.EXPECT().Deadline(domain.TransportTypeFoot, gomock.Any()).Return(expectedDeadline, nil)
+			tx.EXPECT().InsertDelivery(gomock.Any(), gomock.Any()).Return(nil)
+			tx.EXPECT().UpdateCourierStatus(gomock.Any(), courier.ID, domain.StatusBusy).Return(wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Assign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.AssignResult{}, res)
+}
+
+func TestService_Unassign_GetByOrderIDError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	wantErr := errors.New("get by order id error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().GetByOrderID(gomock.Any(), orderID).Return(nil, wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Unassign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.UnassignResult{}, res)
+}
+
+func TestService_Unassign_DeleteByOrderIDError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	existing := &domain.Delivery{
+		ID:        100,
+		CourierID: 10,
+		OrderID:   orderID,
+	}
+
+	wantErr := errors.New("delete error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().GetByOrderID(gomock.Any(), orderID).Return(existing, nil)
+			tx.EXPECT().DeleteByOrderID(gomock.Any(), orderID).Return(wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Unassign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.UnassignResult{}, res)
+}
+
+func TestService_Unassign_UpdateCourierStatusError(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	existing := &domain.Delivery{
+		ID:        100,
+		CourierID: 10,
+		OrderID:   orderID,
+	}
+
+	wantErr := errors.New("update status error")
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().GetByOrderID(gomock.Any(), orderID).Return(existing, nil)
+			tx.EXPECT().DeleteByOrderID(gomock.Any(), orderID).Return(nil)
+			tx.EXPECT().UpdateCourierStatus(gomock.Any(), existing.CourierID, domain.StatusAvailable).Return(wantErr)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Unassign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.Equal(t, domain.UnassignResult{}, res)
+}
+
+func TestService_Unassign_DeliveryNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	repo.EXPECT().WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, fn func(delivery.TxRepository) error) error {
+			tx := NewMockTxRepository(ctrl)
+			tx.EXPECT().GetByOrderID(gomock.Any(), orderID).Return(nil, nil)
+			return fn(tx)
+		})
+
+	service := newTestDeliveryService(repo, factory)
+
+	res, err := service.Unassign(ctx, orderID)
+
+	require.ErrorIs(t, err, apperr.ErrNotFound)
+	require.Equal(t, domain.UnassignResult{}, res)
+}
+
+func TestNewDeliveryService_ZeroTimeoutUsesDefault_Behavior(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+
+	repo := NewMockdeliveryRepository(ctrl)
+	factory := NewMockTimeFactory(ctrl)
+
+	svc := delivery.NewDeliveryService(repo, factory, 0)
+
+	ctx := context.Background()
+	orderID := "order_1"
+
+	var capturedCtx context.Context
+	wantErr := errors.New("stopped")
+
+	repo.EXPECT().
+		WithTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(c context.Context, fn func(delivery.TxRepository) error) error {
+			capturedCtx = c
+			return wantErr
+		})
+
+	_, err := svc.Assign(ctx, orderID)
+
+	require.ErrorIs(t, err, wantErr)
+	require.NotNil(t, capturedCtx, "context must be captured")
+
+	deadline, ok := capturedCtx.Deadline()
+	require.True(t, ok, "expected context with deadline")
+
+	remaining := time.Until(deadline)
+
+	require.Greater(t, remaining, 2*time.Second)
+	require.Less(t, remaining, 4*time.Second)
 }

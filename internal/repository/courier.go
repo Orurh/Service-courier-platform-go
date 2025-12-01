@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // CourierRepo represents courier repository.
@@ -72,7 +72,7 @@ func (r *CourierRepo) Create(ctx context.Context, c *domain.Courier) (int64, err
 		c.Name, c.Phone, c.Status, c.TransportType).Scan(&id)
 	if err != nil {
 		if IsDuplicate(err) {
-			return 0, apperr.Conflict
+			return 0, apperr.ErrConflict
 		}
 		return 0, fmt.Errorf("create courier: %w", err)
 	}
@@ -94,7 +94,7 @@ func (r *CourierRepo) UpdatePartial(ctx context.Context, u domain.PartialCourier
 
 	if err != nil {
 		if IsDuplicate(err) {
-			return false, apperr.Conflict
+			return false, apperr.ErrConflict
 		}
 		return false, fmt.Errorf("update courier %d: %w", u.ID, err)
 	}

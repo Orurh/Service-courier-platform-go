@@ -28,7 +28,7 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, modelToResponse(*c))
-	case errors.Is(err, apperr.NotFound):
+	case errors.Is(err, apperr.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not found")
 	default:
 		writeError(w, r, http.StatusInternalServerError, "internal error")
@@ -77,9 +77,9 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 		w.Header().Set("Location", "/courier/"+strconv.FormatInt(id, 10))
 		writeJSON(w, r, http.StatusCreated, map[string]any{"id": id})
-	case errors.Is(err, apperr.Invalid):
+	case errors.Is(err, apperr.ErrInvalid):
 		writeError(w, r, http.StatusBadRequest, "invalid input")
-	case errors.Is(err, apperr.Conflict):
+	case errors.Is(err, apperr.ErrConflict):
 		writeError(w, r, http.StatusConflict, "phone already exists")
 	default:
 		writeError(w, r, http.StatusInternalServerError, "internal error")
@@ -96,11 +96,11 @@ func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, map[string]string{"status": "ok"})
-	case errors.Is(err, apperr.Invalid):
+	case errors.Is(err, apperr.ErrInvalid):
 		writeError(w, r, http.StatusBadRequest, "invalid input")
-	case errors.Is(err, apperr.Conflict):
+	case errors.Is(err, apperr.ErrConflict):
 		writeError(w, r, http.StatusConflict, "phone already exists")
-	case errors.Is(err, apperr.NotFound):
+	case errors.Is(err, apperr.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "not found")
 	default:
 		writeError(w, r, http.StatusInternalServerError, "internal error")

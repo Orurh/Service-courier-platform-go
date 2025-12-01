@@ -1,7 +1,9 @@
+//go:generate mockgen -source=contracts.go -destination=courier_mocks_test.go -package=courier_test
 package courier
 
 import (
 	"context"
+
 	"course-go-avito-Orurh/internal/domain"
 )
 

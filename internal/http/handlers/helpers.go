@@ -41,7 +41,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) 
 }
 
 const (
-	bodyLimit = 1 << 20 // 1 MiB
+	bodyLimit = 1 << 20
 )
 
 func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) bool {

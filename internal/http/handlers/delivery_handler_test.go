@@ -1,4 +1,3 @@
-// internal/http/handlers/delivery_handler_test.go
 package handlers
 
 import (
@@ -10,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
@@ -47,9 +49,7 @@ func TestDeliveryHandler_Assign_OK(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		assignFn: func(ctx context.Context, orderID string) (domain.AssignResult, error) {
-			if orderID != "order-123" {
-				t.Fatalf("expected orderID %q, got %q", "order-123", orderID)
-			}
+			require.Equal(t, "order-123", orderID)
 			return domain.AssignResult{
 				CourierID:     42,
 				OrderID:       orderID,
@@ -60,30 +60,23 @@ func TestDeliveryHandler_Assign_OK(t *testing.T) {
 	}
 
 	h := NewDeliveryHandler(uc)
-
 	h.Assign(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
 
-	var resp assignDeliveryResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if resp.CourierID != 42 ||
-		resp.OrderID != "order-123" ||
-		resp.TransportType != string(domain.TransportTypeCar) ||
-		!resp.DeliveryDeadline.Equal(deadline) {
-		t.Fatalf("unexpected response: %#v", resp)
-	}
+	expectedJSON := `{
+        "courier_id": 42,
+        "order_id": "order-123",
+        "transport_type": "car",
+        "delivery_deadline": "2025-01-02T03:04:05Z"
+    }`
+	assert.JSONEq(t, expectedJSON, rr.Body.String())
 }
 
 func TestDeliveryHandler_Assign_Invalid(t *testing.T) {
 	t.Parallel()
 
-	body := `{"order_id":""}` // но это неважно, всё равно вернём apperr.Invalid из usecase
+	body := `{"order_id":""}`
 	req := httptest.NewRequest(http.MethodPost, "/delivery/assign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -91,25 +84,15 @@ func TestDeliveryHandler_Assign_Invalid(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		assignFn: func(ctx context.Context, orderID string) (domain.AssignResult, error) {
-			return domain.AssignResult{}, apperr.Invalid
+			return domain.AssignResult{}, apperr.ErrInvalid
 		},
 	}
 
 	h := NewDeliveryHandler(uc)
-
 	h.Assign(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
-	}
-
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.JSONEq(t, `{"error": "invalid input"}`, rr.Body.String())
 }
 
 func TestDeliveryHandler_Assign_Conflict(t *testing.T) {
@@ -122,10 +105,8 @@ func TestDeliveryHandler_Assign_Conflict(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		assignFn: func(ctx context.Context, orderID string) (domain.AssignResult, error) {
-			if orderID != "order-123" {
-				t.Fatalf("expected orderID %q, got %q", "order-123", orderID)
-			}
-			return domain.AssignResult{}, apperr.Conflict
+			require.Equal(t, "order-123", orderID)
+			return domain.AssignResult{}, apperr.ErrConflict
 		},
 	}
 
@@ -133,18 +114,13 @@ func TestDeliveryHandler_Assign_Conflict(t *testing.T) {
 
 	h.Assign(rr, req)
 
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected status %d, got %d", http.StatusConflict, rr.Code)
-	}
+	require.Equal(t, http.StatusConflict, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-
-	if resp["error"] == "" {
-		t.Fatalf(`expected non-empty "error" message in body, got: %#v`, resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
+	require.Contains(t, resp["error"], "no available couriers")
 }
 
 func TestDeliveryHandler_Assign_InternalError(t *testing.T) {
@@ -166,23 +142,17 @@ func TestDeliveryHandler_Assign_InternalError(t *testing.T) {
 
 	h.Assign(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
 }
 
 func TestDeliveryHandler_Assign_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	// Некорректный JSON, decodeJSON должен отстрелить 400 и не вызвать usecase
 	body := `{"order_id":`
 	req := httptest.NewRequest(http.MethodPost, "/delivery/assign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -191,7 +161,7 @@ func TestDeliveryHandler_Assign_InvalidJSON(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		assignFn: func(ctx context.Context, orderID string) (domain.AssignResult, error) {
-			t.Fatalf("usecase.Assign must not be called on invalid json")
+			require.FailNow(t, "usecase.Assign must not be called on invalid json")
 			return domain.AssignResult{}, nil
 		},
 	}
@@ -200,17 +170,12 @@ func TestDeliveryHandler_Assign_InvalidJSON(t *testing.T) {
 
 	h.Assign(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
 }
 
 func TestDeliveryHandler_Unassign_OK(t *testing.T) {
@@ -224,9 +189,7 @@ func TestDeliveryHandler_Unassign_OK(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		unassignFn: func(ctx context.Context, orderID string) (domain.UnassignResult, error) {
-			if orderID != "order-123" {
-				t.Fatalf("expected orderID %q, got %q", "order-123", orderID)
-			}
+			require.Equal(t, "order-123", orderID)
 			return domain.UnassignResult{
 				CourierID: 10,
 				OrderID:   orderID,
@@ -236,20 +199,16 @@ func TestDeliveryHandler_Unassign_OK(t *testing.T) {
 	}
 
 	h := NewDeliveryHandler(uc)
-
 	h.Unassign(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
 
-	var resp unassignDeliveryResponse
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp.OrderID != "order-123" || resp.Status == "" || resp.CourierID != 10 {
-		t.Fatalf("unexpected response: %#v", resp)
-	}
+	expectedJSON := `{
+        "order_id": "order-123",
+        "status": "unassigned",
+        "courier_id": 10
+    }`
+	assert.JSONEq(t, expectedJSON, rr.Body.String())
 }
 
 func TestDeliveryHandler_Unassign_NotFound(t *testing.T) {
@@ -263,10 +222,8 @@ func TestDeliveryHandler_Unassign_NotFound(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		unassignFn: func(ctx context.Context, orderID string) (domain.UnassignResult, error) {
-			if orderID != "order-404" {
-				t.Fatalf("expected orderID %q, got %q", "order-404", orderID)
-			}
-			return domain.UnassignResult{}, apperr.NotFound
+			require.Equal(t, "order-404", orderID)
+			return domain.UnassignResult{}, apperr.ErrNotFound
 		},
 	}
 
@@ -274,23 +231,19 @@ func TestDeliveryHandler_Unassign_NotFound(t *testing.T) {
 
 	h.Unassign(rr, req)
 
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, rr.Code)
-	}
+	require.Equal(t, http.StatusNotFound, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf(`expected non-empty "error" message, got: %#v`, resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
+	require.Contains(t, resp["error"], "delivery not found")
 }
 
 func TestDeliveryHandler_Unassign_Invalid(t *testing.T) {
 	t.Parallel()
 
-	body := `{"order_id":"bad"}` // значение не важно, ошибка сгенерирует usecase
+	body := `{"order_id":"bad"}`
 	req := httptest.NewRequest(http.MethodPost, "/delivery/unassign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -298,7 +251,7 @@ func TestDeliveryHandler_Unassign_Invalid(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		unassignFn: func(ctx context.Context, orderID string) (domain.UnassignResult, error) {
-			return domain.UnassignResult{}, apperr.Invalid
+			return domain.UnassignResult{}, apperr.ErrInvalid
 		},
 	}
 
@@ -306,17 +259,12 @@ func TestDeliveryHandler_Unassign_Invalid(t *testing.T) {
 
 	h.Unassign(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
 }
 
 func TestDeliveryHandler_Unassign_InternalError(t *testing.T) {
@@ -338,23 +286,18 @@ func TestDeliveryHandler_Unassign_InternalError(t *testing.T) {
 
 	h.Unassign(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 
 	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	require.Contains(t, resp, "error")
+	require.NotEmpty(t, resp["error"])
 }
 
 func TestDeliveryHandler_Unassign_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
-	body := `{"order_id":` // сломанный JSON
+	body := `{"order_id":`
 	req := httptest.NewRequest(http.MethodPost, "/delivery/unassign", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -362,24 +305,14 @@ func TestDeliveryHandler_Unassign_InvalidJSON(t *testing.T) {
 
 	uc := &stubDeliveryUsecase{
 		unassignFn: func(ctx context.Context, orderID string) (domain.UnassignResult, error) {
-			t.Fatalf("usecase.Unassign must not be called on invalid json")
+			require.FailNow(t, "usecase.Unassign must not be called on invalid json")
 			return domain.UnassignResult{}, nil
 		},
 	}
 
 	h := NewDeliveryHandler(uc)
-
 	h.Unassign(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
-	}
-
-	var resp map[string]string
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if resp["error"] == "" {
-		t.Fatalf("expected non-empty error message, got %#v", resp)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.JSONEq(t, `{"error": "invalid json"}`, rr.Body.String())
 }

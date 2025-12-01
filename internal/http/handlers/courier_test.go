@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"context"
@@ -9,11 +9,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/require"
+
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
-
-	"github.com/go-chi/chi/v5"
+	"course-go-avito-Orurh/internal/http/handlers"
 )
+
+type courierResponse struct {
+	ID    int64  `json:"id"`
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+}
 
 type stubCourierUsecase struct {
 	getFn           func(ctx context.Context, id int64) (*domain.Courier, error)
@@ -49,14 +57,12 @@ func TestCourierHandler_GetByID_OK(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		getFn: func(ctx context.Context, id int64) (*domain.Courier, error) {
-			if id != expected.ID {
-				t.Fatalf("expected id %d, got %d", expected.ID, id)
-			}
+			require.Equal(t, expected.ID, id)
 			return expected, nil
 		},
 	}
 
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/99", nil)
 	routeCtx := chi.NewRouteContext()
@@ -67,32 +73,22 @@ func TestCourierHandler_GetByID_OK(t *testing.T) {
 
 	h.GetByID(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
 
-	var resp courierDTO
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	if resp.ID != expected.ID {
-		t.Fatalf("expected ID %d, got %d", expected.ID, resp.ID)
-	}
-	if resp.Name != expected.Name {
-		t.Fatalf("expected Name %q, got %q", expected.Name, resp.Name)
-	}
-	if resp.Phone != expected.Phone {
-		t.Fatalf("expected Phone %q, got %q", expected.Phone, resp.Phone)
-	}
+	var resp courierResponse
+	err := json.NewDecoder(rr.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Equal(t, expected.ID, resp.ID)
+	require.Equal(t, expected.Name, resp.Name)
+	require.Equal(t, expected.Phone, resp.Phone)
 }
 
 func TestCourierHandler_GetByID_InvalidID(t *testing.T) {
 	t.Parallel()
 
-	h := NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(&stubCourierUsecase{
 		getFn: func(ctx context.Context, id int64) (*domain.Courier, error) {
-			t.Fatalf("usecase.Get should not be called on invalid id")
+			require.FailNow(t, "usecase.Get should not be called on invalid id")
 			return nil, nil
 		},
 	})
@@ -105,9 +101,7 @@ func TestCourierHandler_GetByID_InvalidID(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetByID(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestCourierHandler_GetByID_NotFound(t *testing.T) {
@@ -115,10 +109,10 @@ func TestCourierHandler_GetByID_NotFound(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		getFn: func(ctx context.Context, id int64) (*domain.Courier, error) {
-			return nil, apperr.NotFound
+			return nil, apperr.ErrNotFound
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/10", nil)
 	routeCtx := chi.NewRouteContext()
@@ -128,9 +122,7 @@ func TestCourierHandler_GetByID_NotFound(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetByID(rr, req)
 
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("expected %d, got %d", http.StatusNotFound, rr.Code)
-	}
+	require.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestCourierHandler_GetByID_InternalError(t *testing.T) {
@@ -141,7 +133,7 @@ func TestCourierHandler_GetByID_InternalError(t *testing.T) {
 			return nil, errors.New("db down")
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/10", nil)
 	routeCtx := chi.NewRouteContext()
@@ -151,9 +143,7 @@ func TestCourierHandler_GetByID_InternalError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.GetByID(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected %d, got %d", http.StatusInternalServerError, rr.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func TestCourierHandler_List_OK(t *testing.T) {
@@ -172,39 +162,31 @@ func TestCourierHandler_List_OK(t *testing.T) {
 			return expected, nil
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/couriers?limit=10&offset=5", nil)
 	rr := httptest.NewRecorder()
 
 	h.List(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected %d, got %d", http.StatusOK, rr.Code)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.NotNil(t, gotLimit)
+	require.Equal(t, 10, *gotLimit)
+	require.NotNil(t, gotOffset)
+	require.Equal(t, 5, *gotOffset)
 
-	if gotLimit == nil || *gotLimit != 10 {
-		t.Fatalf("expected limit=10, got %#v", gotLimit)
-	}
-	if gotOffset == nil || *gotOffset != 5 {
-		t.Fatalf("expected offset=5, got %#v", gotOffset)
-	}
-
-	var resp []courierDTO
-	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(resp) != len(expected) {
-		t.Fatalf("expected %d items, got %d", len(expected), len(resp))
-	}
+	var resp []courierResponse
+	err := json.NewDecoder(rr.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Len(t, resp, len(expected))
 }
 
 func TestCourierHandler_List_InvalidLimit(t *testing.T) {
 	t.Parallel()
 
-	h := NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(&stubCourierUsecase{
 		listFn: func(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
-			t.Fatalf("List should not be called when limit is invalid")
+			require.FailNow(t, "List should not be called when limit is invalid")
 			return nil, nil
 		},
 	})
@@ -214,17 +196,15 @@ func TestCourierHandler_List_InvalidLimit(t *testing.T) {
 
 	h.List(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestCourierHandler_List_InvalidOffset(t *testing.T) {
 	t.Parallel()
 
-	h := NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(&stubCourierUsecase{
 		listFn: func(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
-			t.Fatalf("List should not be called when offset is invalid")
+			require.FailNow(t, "List should not be called when offset is invalid")
 			return nil, nil
 		},
 	})
@@ -234,9 +214,7 @@ func TestCourierHandler_List_InvalidOffset(t *testing.T) {
 
 	h.List(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestCourierHandler_List_InternalError(t *testing.T) {
@@ -247,16 +225,14 @@ func TestCourierHandler_List_InternalError(t *testing.T) {
 			return nil, errors.New("db error")
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/couriers", nil)
 	rr := httptest.NewRecorder()
 
 	h.List(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected %d, got %d", http.StatusInternalServerError, rr.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func TestCourierHandler_Create_OK(t *testing.T) {
@@ -270,7 +246,7 @@ func TestCourierHandler_Create_OK(t *testing.T) {
 			return 42, nil
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"name":"Artem","phone":"+70000000000","status":"available","transport_type":"on_foot"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -278,15 +254,10 @@ func TestCourierHandler_Create_OK(t *testing.T) {
 
 	h.Create(rr, req)
 
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected %d, got %d", http.StatusCreated, rr.Code)
-	}
-	if loc := rr.Header().Get("Location"); loc != "/courier/42" {
-		t.Fatalf("expected Location /courier/42, got %q", loc)
-	}
-	if gotModel == nil || gotModel.Name != "Artem" {
-		t.Fatalf("unexpected model: %#v", gotModel)
-	}
+	require.Equal(t, http.StatusCreated, rr.Code)
+	require.Equal(t, "/courier/42", rr.Header().Get("Location"))
+	require.NotNil(t, gotModel)
+	require.Equal(t, "Artem", gotModel.Name)
 }
 
 func TestCourierHandler_Create_Invalid(t *testing.T) {
@@ -294,10 +265,10 @@ func TestCourierHandler_Create_Invalid(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		createFn: func(ctx context.Context, c *domain.Courier) (int64, error) {
-			return 0, apperr.Invalid
+			return 0, apperr.ErrInvalid
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"name":"","phone":"bad"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -305,9 +276,7 @@ func TestCourierHandler_Create_Invalid(t *testing.T) {
 
 	h.Create(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestCourierHandler_Create_Conflict(t *testing.T) {
@@ -315,10 +284,10 @@ func TestCourierHandler_Create_Conflict(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		createFn: func(ctx context.Context, c *domain.Courier) (int64, error) {
-			return 0, apperr.Conflict
+			return 0, apperr.ErrConflict
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"name":"Artem","phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -326,9 +295,7 @@ func TestCourierHandler_Create_Conflict(t *testing.T) {
 
 	h.Create(rr, req)
 
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected %d, got %d", http.StatusConflict, rr.Code)
-	}
+	require.Equal(t, http.StatusConflict, rr.Code)
 }
 
 func TestCourierHandler_Create_InternalError(t *testing.T) {
@@ -339,7 +306,7 @@ func TestCourierHandler_Create_InternalError(t *testing.T) {
 			return 0, errors.New("db error")
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"name":"Artem","phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -347,9 +314,7 @@ func TestCourierHandler_Create_InternalError(t *testing.T) {
 
 	h.Create(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected %d, got %d", http.StatusInternalServerError, rr.Code)
-	}
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func TestCourierHandler_Update_OK(t *testing.T) {
@@ -363,7 +328,7 @@ func TestCourierHandler_Update_OK(t *testing.T) {
 			return true, nil
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"id":1,"name":"New Name"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -371,12 +336,10 @@ func TestCourierHandler_Update_OK(t *testing.T) {
 
 	h.Update(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected %d, got %d", http.StatusOK, rr.Code)
-	}
-	if gotUpdate.ID != 1 || gotUpdate.Name == nil || *gotUpdate.Name != "New Name" {
-		t.Fatalf("unexpected update: %#v", gotUpdate)
-	}
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int64(1), gotUpdate.ID)
+	require.NotNil(t, gotUpdate.Name)
+	require.Equal(t, "New Name", *gotUpdate.Name)
 }
 
 func TestCourierHandler_Update_Invalid(t *testing.T) {
@@ -384,10 +347,10 @@ func TestCourierHandler_Update_Invalid(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		updatePartialFn: func(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
-			return false, apperr.Invalid
+			return false, apperr.ErrInvalid
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"id":0}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -395,9 +358,7 @@ func TestCourierHandler_Update_Invalid(t *testing.T) {
 
 	h.Update(rr, req)
 
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected %d, got %d", http.StatusBadRequest, rr.Code)
-	}
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
 func TestCourierHandler_Update_Conflict(t *testing.T) {
@@ -405,10 +366,10 @@ func TestCourierHandler_Update_Conflict(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		updatePartialFn: func(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
-			return false, apperr.Conflict
+			return false, apperr.ErrConflict
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"id":1,"phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -416,9 +377,7 @@ func TestCourierHandler_Update_Conflict(t *testing.T) {
 
 	h.Update(rr, req)
 
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("expected %d, got %d", http.StatusConflict, rr.Code)
-	}
+	require.Equal(t, http.StatusConflict, rr.Code)
 }
 
 func TestCourierHandler_Update_NotFound(t *testing.T) {
@@ -426,10 +385,10 @@ func TestCourierHandler_Update_NotFound(t *testing.T) {
 
 	uc := &stubCourierUsecase{
 		updatePartialFn: func(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
-			return false, apperr.NotFound
+			return false, apperr.ErrNotFound
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"id":123,"name":"X"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -437,9 +396,7 @@ func TestCourierHandler_Update_NotFound(t *testing.T) {
 
 	h.Update(rr, req)
 
-	if rr.Code != http.StatusNotFound {
-		t.Fatalf("expected %d, got %d", http.StatusNotFound, rr.Code)
-	}
+	require.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestCourierHandler_Update_InternalError(t *testing.T) {
@@ -450,7 +407,7 @@ func TestCourierHandler_Update_InternalError(t *testing.T) {
 			return false, errors.New("db error")
 		},
 	}
-	h := NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(uc)
 
 	body := `{"id":1,"name":"X"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -458,7 +415,45 @@ func TestCourierHandler_Update_InternalError(t *testing.T) {
 
 	h.Update(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected %d, got %d", http.StatusInternalServerError, rr.Code)
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+}
+
+func TestCourierHandler_Create_BadJSON(t *testing.T) {
+	t.Parallel()
+
+	uc := &stubCourierUsecase{
+		createFn: func(ctx context.Context, c *domain.Courier) (int64, error) {
+			require.FailNow(t, "Create must not be called on invalid JSON")
+			return 0, nil
+		},
 	}
+	h := handlers.NewCourierHandler(uc)
+
+	body := `{"name": "Artem", "phone": "+70000000000",`
+	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	h.Create(rr, req)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
+}
+
+func TestCourierHandler_Update_BadJSON(t *testing.T) {
+	t.Parallel()
+
+	uc := &stubCourierUsecase{
+		updatePartialFn: func(ctx context.Context, u domain.PartialCourierUpdate) (bool, error) {
+			require.FailNow(t, "UpdatePartial must not be called on invalid JSON")
+			return false, nil
+		},
+	}
+	h := handlers.NewCourierHandler(uc)
+
+	body := `{"id": 1, "name": "New Name"`
+	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+
+	h.Update(rr, req)
+
+	require.Equal(t, http.StatusBadRequest, rr.Code)
 }

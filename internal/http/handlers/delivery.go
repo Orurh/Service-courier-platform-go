@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"course-go-avito-Orurh/internal/apperr"
 	"errors"
 	"net/http"
+
+	"course-go-avito-Orurh/internal/apperr"
 )
 
 // DeliveryHandler handles HTTP requests for delivery resources.
@@ -27,9 +28,9 @@ func (h *DeliveryHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, assignResultToResponse(res))
-	case errors.Is(err, apperr.Invalid):
+	case errors.Is(err, apperr.ErrInvalid):
 		writeError(w, r, http.StatusBadRequest, "invalid input")
-	case errors.Is(err, apperr.Conflict):
+	case errors.Is(err, apperr.ErrConflict):
 		writeError(w, r, http.StatusConflict, "no available couriers")
 	default:
 		writeError(w, r, http.StatusInternalServerError, "internal error")
@@ -47,9 +48,9 @@ func (h *DeliveryHandler) Unassign(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		writeJSON(w, r, http.StatusOK, unassignResultToResponse(res))
-	case errors.Is(err, apperr.Invalid):
+	case errors.Is(err, apperr.ErrInvalid):
 		writeError(w, r, http.StatusBadRequest, "invalid input")
-	case errors.Is(err, apperr.NotFound):
+	case errors.Is(err, apperr.ErrNotFound):
 		writeError(w, r, http.StatusNotFound, "delivery not found")
 	default:
 		writeError(w, r, http.StatusInternalServerError, "internal error")

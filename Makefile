@@ -81,7 +81,7 @@ test:
 
 test-race:
 	@echo "→ go test -race $(PKG)"
-	go test -race -count=1 $(PKG)
+	go test -race -count=10 $(PKG)
 
 cover-dir:
 	@mkdir -p $(COVER_DIR)

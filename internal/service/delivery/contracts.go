@@ -1,25 +1,30 @@
-//go:generate mockgen -source=contracts.go -destination=delivery_mocks_test.go -package=delivery
+//go:generate mockgen -source=contracts.go -destination=delivery_mocks_test.go -package=delivery_test
 
 package delivery
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/domain"
 	"time"
+
+	"course-go-avito-Orurh/internal/domain"
 )
 
-// Tx abstracts a delivery repository transaction.
-type Tx interface {
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context)
+// TxRepository abstracts a delivery repository transaction.
+type TxRepository interface {
+	FindAvailableCourierForUpdate(ctx context.Context) (*domain.Courier, error)
+	UpdateCourierStatus(ctx context.Context, id int64, status domain.CourierStatus) error
+	InsertDelivery(ctx context.Context, d *domain.Delivery) error
+	GetByOrderID(ctx context.Context, orderID string) (*domain.Delivery, error)
+	DeleteByOrderID(ctx context.Context, orderID string) error
 }
 
+// deliveryRepository is an interface for the service layer.
 type deliveryRepository interface {
-	BeginTx(ctx context.Context) (Tx, error)
-	FindAvailableCourierForUpdate(ctx context.Context, tx Tx) (*domain.Courier, error)
-	UpdateCourierStatus(ctx context.Context, tx Tx, id int64, status string) error
-	InsertDelivery(ctx context.Context, tx Tx, d *domain.Delivery) error
-	GetByOrderID(ctx context.Context, tx Tx, orderID string) (*domain.Delivery, error)
-	DeleteByOrderID(ctx context.Context, tx Tx, orderID string) error
+	WithTx(ctx context.Context, fn func(tx TxRepository) error) error
 	ReleaseCouriers(ctx context.Context, now time.Time) (int64, error)
+}
+
+// TimeFactory is a factory for calculating delivery deadline.
+type TimeFactory interface {
+	Deadline(transport domain.CourierTransportType, now time.Time) (time.Time, error)
 }

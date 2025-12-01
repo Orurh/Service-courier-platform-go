@@ -2,11 +2,11 @@ package apperr
 
 import "errors"
 
-// Invalid is returned when the input fails domain validation.
-var Invalid = errors.New("invalid input")
+// ErrInvalid is returned when the input fails domain validation.
+var ErrInvalid = errors.New("invalid input")
 
-// Conflict indicates a uniqueness or state conflict (HTTP 409).
-var Conflict = errors.New("conflict")
+// ErrConflict indicates a uniqueness or state conflict (HTTP 409).
+var ErrConflict = errors.New("conflict")
 
-// NotFound indicates that the requested resource does not exist.
-var NotFound = errors.New("not found")
+// ErrNotFound indicates that the requested resource does not exist.
+var ErrNotFound = errors.New("not found")

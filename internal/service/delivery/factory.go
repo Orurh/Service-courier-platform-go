@@ -1,4 +1,3 @@
-//go:generate mockgen -source=factory.go -destination=timefactory_mocks_test.go -package=delivery \
 package delivery
 
 import (
@@ -7,11 +6,6 @@ import (
 
 	"course-go-avito-Orurh/internal/domain"
 )
-
-// TimeFactory is a factory for calculating delivery deadline.
-type TimeFactory interface {
-	Deadline(transport domain.CourierTransportType, now time.Time) (time.Time, error)
-}
 
 type defaultTimeFactory struct{}
 

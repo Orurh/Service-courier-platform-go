@@ -17,7 +17,6 @@ type Courier struct {
 }
 
 // PartialCourierUpdate carries optional fields to update a courier.
-// A nil field means “do not change” that attribute.
 type PartialCourierUpdate struct {
 	ID            int64
 	Name          *string

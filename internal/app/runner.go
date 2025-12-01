@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/service/delivery"
 	"errors"
 	"log"
 	"net/http"
@@ -10,11 +9,14 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/dig"
+
+	"course-go-avito-Orurh/internal/service/delivery"
 )
 
+type autoReleaseInterval time.Duration
+
 const (
-	autoReleaseInterval = 10 * time.Second
-	shutdownTimeout     = 15 * time.Second
+	shutdownTimeout = 15 * time.Second
 )
 
 // Runner runs the HTTP server
@@ -54,8 +56,8 @@ func run(container *dig.Container) error {
 }
 
 func appRun(server *http.Server, appCtx context.Context, pool *pgxpool.Pool, logger *log.Logger,
-	deliveryService *delivery.Service) error {
-	startAutoReleaseLoop(appCtx, logger, deliveryService, autoReleaseInterval)
+	deliveryService *delivery.Service, autoReleaseInterval autoReleaseInterval) error {
+	startAutoReleaseLoop(appCtx, logger, deliveryService, time.Duration(autoReleaseInterval))
 	startServer(server, logger)
 	waitForShutdown(appCtx, logger)
 	gracefulShutdown(server, logger, shutdownTimeout)
