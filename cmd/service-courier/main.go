@@ -13,5 +13,6 @@ func main() {
 	defer stop()
 
 	container := app.MustBuildContainer(ctxSignals)
-	app.MustRun(container)
+	runner := app.NewRunner()
+	runner.MustRun(container)
 }

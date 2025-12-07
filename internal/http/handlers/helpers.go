@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// reqID extracts correlation id from context (chi middleware).
 func reqID(ctx context.Context) string {
 	if id := middleware.GetReqID(ctx); id != "" {
 		return id
@@ -32,21 +31,19 @@ func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	}
 }
 
-// ErrResponse — struct for error responses.
-type ErrResponse struct {
+type errResponse struct {
 	Error string `json:"error"`
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) {
 	log.Printf("req_id=%s http_error status=%d msg=%q", reqID(r.Context()), status, msg)
-	writeJSON(w, r, status, ErrResponse{Error: msg})
+	writeJSON(w, r, status, errResponse{Error: msg})
 }
 
 const (
-	bodyLimit = 1 << 20 // 1 MiB
+	bodyLimit = 1 << 20
 )
 
-// decodeJSON — decodes JSON from request body.
 func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 	dec := json.NewDecoder(r.Body)
@@ -63,7 +60,6 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) bool {
 	return true
 }
 
-// idFromURL — validates and extracts ID from URL.
 func idFromURL(r *http.Request, name string) (int64, error) {
 	idStr := chi.URLParam(r, name)
 	id, err := strconv.ParseInt(idStr, 10, 64)

@@ -11,7 +11,7 @@ import (
 )
 
 // New constructs a chi-based http.Handler with base middleware and routes.
-func New(base *handlers.Handlers, cour *handlers.CourierHandler) http.Handler {
+func New(base *handlers.Handlers, cour *handlers.CourierHandler, delivery *handlers.DeliveryHandler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -28,5 +28,8 @@ func New(base *handlers.Handlers, cour *handlers.CourierHandler) http.Handler {
 	r.Get("/couriers", cour.List)
 	r.Post("/courier", cour.Create)
 	r.Put("/courier", cour.Update)
+
+	r.Post("/delivery/assign", delivery.Assign)
+	r.Post("/delivery/unassign", delivery.Unassign)
 	return r
 }

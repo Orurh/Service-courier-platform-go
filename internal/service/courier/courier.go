@@ -15,7 +15,7 @@ type Service struct {
 	operationTimeout time.Duration
 }
 
-// NewService creates and configures a CourierService.
+// NewService creates and configures a courier Service.
 func NewService(r courierRepository, timeout time.Duration) *Service {
 	if timeout <= 0 {
 		timeout = 3 * time.Second
@@ -23,64 +23,71 @@ func NewService(r courierRepository, timeout time.Duration) *Service {
 	return &Service{repo: r, operationTimeout: timeout}
 }
 
-// withOperationTimeout
-func (s *Service) withOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func (s *Service) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, s.operationTimeout)
 }
 
-// General validation
 func validateCreate(c *domain.Courier) error {
 	if c == nil {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if strings.TrimSpace(c.Name) == "" {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if !domain.ValidatePhone(c.Phone) {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if !domain.CourierStatus(c.Status).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
+	}
+	if c.TransportType == "" {
+		c.TransportType = domain.TransportTypeFoot
+	}
+	if !domain.CourierTransportType(c.TransportType).Valid() {
+		return apperr.ErrInvalid
 	}
 	return nil
 }
 
 func validateUpdate(u *domain.PartialCourierUpdate) error {
 	if u.ID <= 0 {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
-	if u.Name == nil && u.Phone == nil && u.Status == nil {
-		return apperr.Invalid
+	if u.Name == nil && u.Phone == nil && u.Status == nil && u.TransportType == nil {
+		return apperr.ErrInvalid
 	}
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Phone != nil && !domain.ValidatePhone(*u.Phone) {
-		return apperr.Invalid
+		return apperr.ErrInvalid
 	}
 	if u.Status != nil && !domain.CourierStatus(*u.Status).Valid() {
-		return apperr.Invalid
+		return apperr.ErrInvalid
+	}
+	if u.TransportType != nil && !domain.CourierTransportType(*u.TransportType).Valid() {
+		return apperr.ErrInvalid
 	}
 	return nil
 }
 
-// Get retrieves a courier by its ID. It returns (nil, nil) if the courier is not found.
+// Get retrieves a courier by its ID.
 func (s *Service) Get(ctx context.Context, id int64) (*domain.Courier, error) {
-	ctx, cancel := s.withOperationTimeout(ctx)
+	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 	c, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if c == nil {
-		return nil, apperr.NotFound
+		return nil, apperr.ErrNotFound
 	}
 	return c, nil
 }
 
 // List returns couriers with optional pagination
 func (s *Service) List(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
-	ctx, cancel := s.withOperationTimeout(ctx)
+	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 	return s.repo.List(ctx, limit, offset)
 }
@@ -90,7 +97,7 @@ func (s *Service) Create(ctx context.Context, c *domain.Courier) (int64, error) 
 	if err := validateCreate(c); err != nil {
 		return 0, err
 	}
-	ctx, cancel := s.withOperationTimeout(ctx)
+	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 	return s.repo.Create(ctx, c)
 }
@@ -100,14 +107,14 @@ func (s *Service) UpdatePartial(ctx context.Context, u domain.PartialCourierUpda
 	if err := validateUpdate(&u); err != nil {
 		return false, err
 	}
-	ctx, cancel := s.withOperationTimeout(ctx)
+	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 	ok, err := s.repo.UpdatePartial(ctx, u)
 	if err != nil {
 		return false, err
 	}
 	if !ok {
-		return false, apperr.NotFound
+		return false, apperr.ErrNotFound
 	}
 	return true, nil
 }

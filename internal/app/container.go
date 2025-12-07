@@ -2,12 +2,6 @@ package app
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/config"
-	"course-go-avito-Orurh/internal/http/handlers"
-	"course-go-avito-Orurh/internal/http/router"
-	"course-go-avito-Orurh/internal/repository"
-	"course-go-avito-Orurh/internal/service/courier"
-
 	"fmt"
 	"log"
 	"net/http"
@@ -15,24 +9,64 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/dig"
+
+	"course-go-avito-Orurh/internal/config"
+	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/http/router"
+	"course-go-avito-Orurh/internal/repository"
+	"course-go-avito-Orurh/internal/service/courier"
+	"course-go-avito-Orurh/internal/service/delivery"
 )
 
-// MustBuildContainer constructs the application's DI container
-func MustBuildContainer(ctx context.Context) *dig.Container {
-	container, err := buildContainer(ctx)
+// ContainerBuilder is a dig container builder.
+type ContainerBuilder struct {
+	dbConnect func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error)
+	logFatalf func(string, ...interface{})
+}
+
+// NewContainerBuilder returns a new dig container builder
+func NewContainerBuilder() *ContainerBuilder {
+	return &ContainerBuilder{
+		dbConnect: connectDbWithRetry,
+		logFatalf: log.Fatalf,
+	}
+}
+
+// WithDBConnect sets the database connection function
+func (b *ContainerBuilder) WithDBConnect(
+	fn func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error),
+) *ContainerBuilder {
+	if fn != nil {
+		b.dbConnect = fn
+	}
+	return b
+}
+
+// WithLogFatalf sets the log.Fatalf function
+func (b *ContainerBuilder) WithLogFatalf(fn func(string, ...interface{})) *ContainerBuilder {
+	if fn != nil {
+		b.logFatalf = fn
+	}
+	return b
+}
+
+// MustBuild builds and returns a new dig container
+func (b *ContainerBuilder) MustBuild(ctx context.Context) *dig.Container {
+	container, err := b.build(ctx)
 	if err != nil {
-		log.Fatalf("failed to build container: %v", err)
+		b.logFatalf("failed to build container: %v", err)
 	}
 	return container
 }
 
-func buildContainer(ctx context.Context) (*dig.Container, error) {
+// build builds and returns a new dig container
+func (b *ContainerBuilder) build(ctx context.Context) (*dig.Container, error) {
 	container := dig.New()
 
 	if err := registerCore(container, ctx); err != nil {
 		return nil, fmt.Errorf("core: %w", err)
 	}
-	if err := registerDb(container); err != nil {
+	if err := registerDb(container, b.dbConnect); err != nil {
 		return nil, fmt.Errorf("DB: %w", err)
 	}
 	if err := registerService(container); err != nil {
@@ -42,6 +76,11 @@ func buildContainer(ctx context.Context) (*dig.Container, error) {
 		return nil, fmt.Errorf("http: %w", err)
 	}
 	return container, nil
+}
+
+// MustBuildContainer builds and returns a new dig container
+func MustBuildContainer(ctx context.Context) *dig.Container {
+	return NewContainerBuilder().MustBuild(ctx)
 }
 
 func provideAll(container *dig.Container, providers ...any) error {
@@ -58,29 +97,41 @@ func registerCore(container *dig.Container, ctx context.Context) error {
 		func() context.Context { return ctx },
 		func() *log.Logger { return log.Default() },
 		config.Load,
+		func(cfg *config.Config) autoReleaseInterval {
+			return autoReleaseInterval(cfg.Delivery.AutoReleaseInterval)
+		},
 	)
 }
 
-func registerDb(container *dig.Container) error {
+func registerDb(
+	container *dig.Container,
+	dbConnect func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error),
+) error {
 	providerDB := func(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-		return connectDbWithRetry(ctx, cfg.DB.DSN(), 10, time.Second)
+		return dbConnect(ctx, cfg.DB.DSN(), 10, time.Second)
 	}
 	return provideAll(container, providerDB)
 }
 
 func registerService(container *dig.Container) error {
-	if err := container.Provide(repository.NewCourierRepo); err != nil {
-		return fmt.Errorf("provide repo: %w", err)
-	}
-	if err := container.Provide(func() time.Duration { return 3 * time.Second }); err != nil {
-		return fmt.Errorf("provide timeout: %w", err)
-	}
-	if err := container.Provide(func(r *repository.CourierRepo, d time.Duration) *courier.Service {
-		return courier.NewService(r, d)
-	}); err != nil {
-		return fmt.Errorf("provide service: %w", err)
-	}
-	return nil
+	return provideAll(container,
+		repository.NewCourierRepo,
+		repository.NewDeliveryRepo,
+		func() time.Duration { return 3 * time.Second },
+		func(repo *repository.CourierRepo, timeout time.Duration) *courier.Service {
+			return courier.NewService(repo, timeout)
+		},
+		func() delivery.TimeFactory {
+			return delivery.NewTimeFactory()
+		},
+		func(
+			repo *repository.DeliveryRepo,
+			timeout time.Duration,
+			factory delivery.TimeFactory,
+		) *delivery.Service {
+			return delivery.NewDeliveryService(repo, factory, timeout)
+		},
+	)
 }
 
 func registerHTTP(container *dig.Container) error {
@@ -96,7 +147,10 @@ func registerHTTP(container *dig.Container) error {
 	}
 	return provideAll(container,
 		handlers.New,
+		handlers.NewCourierUsecase,
 		handlers.NewCourierHandler,
+		handlers.NewDeliveryUsecase,
+		handlers.NewDeliveryHandler,
 		router.New,
 		serverProvider,
 	)
