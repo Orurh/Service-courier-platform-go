@@ -6,8 +6,9 @@ package courier_test
 
 import (
 	context "context"
-	domain "course-go-avito-Orurh/internal/domain"
 	reflect "reflect"
+
+	domain "course-go-avito-Orurh/internal/domain"
 
 	gomock "github.com/golang/mock/gomock"
 )

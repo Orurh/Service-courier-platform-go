@@ -6,10 +6,11 @@ package delivery_test
 
 import (
 	context "context"
-	domain "course-go-avito-Orurh/internal/domain"
-	delivery "course-go-avito-Orurh/internal/service/delivery"
 	reflect "reflect"
 	time "time"
+
+	domain "course-go-avito-Orurh/internal/domain"
+	delivery "course-go-avito-Orurh/internal/service/delivery"
 
 	gomock "github.com/golang/mock/gomock"
 )

@@ -29,9 +29,14 @@ func setupTestContainer(t *testing.T) *dig.Container {
 		name     string
 		provider any
 	}{
-		{"context", func() context.Context { return context.Background() }},
-		{"logger", func() *log.Logger { return newTestLogger() }},
-		{"config", func() *config.Config { return &config.Config{Port: 8080} }},
+		{"context", context.Background},
+		{"logger", newTestLogger},
+		{"config", func() *config.Config {
+			return &config.Config{
+				Port:         8080,
+				OrderService: "localhost:50051",
+			}
+		}},
 		{"pgxpool", func() *pgxpool.Pool { return &pgxpool.Pool{} }},
 	}
 
@@ -92,7 +97,7 @@ func TestProvideAll_Success(t *testing.T) {
 	c := dig.New()
 
 	err := provideAll(c,
-		func() context.Context { return context.Background() },
+		context.Background,
 		func() time.Duration { return 3 * time.Second },
 	)
 	require.NoError(t, err)
@@ -237,3 +242,14 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	c := builder.MustBuild(ctx)
 	require.NotNil(t, c)
 }
+
+// func TestRegisterService_ProvidesOrderGateway(t *testing.T) {
+// 	t.Parallel()
+
+// 	c := setupTestContainer(t)
+
+// 	err := c.Invoke(func(gw ordergateway.Gateway) {
+// 		require.NotNil(t, gw)
+// 	})
+// 	require.NoError(t, err)
+// }

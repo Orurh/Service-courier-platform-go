@@ -171,6 +171,7 @@ func (s *CourierRepositorySuite) TestUpdatePartial_IsDublicate() {
 	s.Error(err)
 	s.ErrorIs(err, apperr.ErrConflict, "expected apperr.ErrConflict on duplicate phone")
 }
+
 func TestCourierRepositorySuite(t *testing.T) {
 	suite.Run(t, new(CourierRepositorySuite))
 }

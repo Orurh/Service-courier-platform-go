@@ -18,12 +18,12 @@ INTEG_PKGS     ?= ./...
 
 ifneq (,$(wildcard .env))
 include .env
-export PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT POSTGRES_HOST GOOSE_DRIVER GOOSE_DBSTRING
+export PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT POSTGRES_HOST GOOSE_DRIVER GOOSE_DBSTRING GOOSE_DBSTRING_HOST
 endif
 
 INTEG_DSN ?= $(TEST_DB_DSN)
 ifeq ($(strip $(INTEG_DSN)),)
-INTEG_DSN := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(if $(POSTGRES_HOST),$(POSTGRES_HOST),127.0.0.1):$(if $(POSTGRES_PORT),$(POSTGRES_PORT),5432)/$(POSTGRES_DB)?sslmode=disable
+INTEG_DSN := postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:$(if $(POSTGRES_PORT),$(POSTGRES_PORT),5432)/$(POSTGRES_DB)?sslmode=disable
 endif
 
 PHONY_TARGETS := \
@@ -52,16 +52,19 @@ help:
 
 db-create:
 	@echo "→ Проверяю наличие БД '$$POSTGRES_DB'..."
-	@docker exec -i my-postgres psql -U "$$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$POSTGRES_DB'" | grep -q 1 \
+	@$(COMPOSE) exec -T postgres psql -U "$$POSTGRES_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$POSTGRES_DB'" | grep -q 1 \
 	 && echo "✓ Уже существует" \
-	 || (echo "→ Создаю БД '$$POSTGRES_DB'"; docker exec -i my-postgres psql -U "$$POSTGRES_USER" -d postgres -c "CREATE DATABASE $$POSTGRES_DB")
+	 || (echo "→ Создаю БД '$$POSTGRES_DB'"; $(COMPOSE) exec -T postgres psql -U "$$POSTGRES_USER" -d postgres -c "CREATE DATABASE $$POSTGRES_DB")
 
 migrate-up:
 	@test -d $(MIGR_DIR) || (echo "Нет каталога $(MIGR_DIR)"; exit 1)
-	$(GOOSE) -dir $(MIGR_DIR) up
+	@echo "→ goose up (host): $${GOOSE_DBSTRING_HOST:-$$GOOSE_DBSTRING}"
+	GOOSE_DBSTRING="$${GOOSE_DBSTRING_HOST:-$$GOOSE_DBSTRING}" $(GOOSE) -dir $(MIGR_DIR) up
 
 migrate-down:
-	$(GOOSE) -dir $(MIGR_DIR) down
+	@echo "→ goose down (host): $${GOOSE_DBSTRING_HOST:-$$GOOSE_DBSTRING}"
+	GOOSE_DBSTRING="$${GOOSE_DBSTRING_HOST:-$$GOOSE_DBSTRING}" $(GOOSE) -dir $(MIGR_DIR) down
+
 
 run:
 	@bash -c 'trap "exit 0" INT; go run ./cmd/$(APP)'
@@ -73,7 +76,7 @@ logs:
 	@bash -c 'trap "exit 0" INT; $(COMPOSE) logs -f'
 
 psql:
-	docker exec -e PGPASSWORD="$$POSTGRES_PASSWORD" -it my-postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+	$(COMPOSE) exec postgres psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
 
 test:
 	@echo "→ go test $(PKG)"
@@ -95,7 +98,8 @@ cover-unit: cover-dir
 cover-integration: cover-dir
 	@echo "→ integration coverage → $(COVER_INTEG)"
 	@test -n "$(INTEG_DSN)" || (echo "ERROR: set POSTGRES_* in .env or INTEG_DSN/TEST_DB_DSN"; exit 1)
-	TEST_DB_DSN="$(INTEG_DSN)" \
+	env -u POSTGRES_HOST -u POSTGRES_PORT -u POSTGRES_USER -u POSTGRES_PASSWORD -u POSTGRES_DB -u GOOSE_DBSTRING \
+	  TEST_DB_DSN="$(INTEG_DSN)" \
 	  go test -tags=$(INTEG_TAGS) -covermode=atomic -coverpkg=./internal/... -coverprofile=$(COVER_INTEG) -count=1 $(INTEG_PKGS)
 	@go tool cover -func=$(COVER_INTEG) | tail -n1
 

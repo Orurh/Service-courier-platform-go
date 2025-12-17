@@ -38,9 +38,7 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // List handles GET /couriers.
 func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	var (
-		limitPtr, offsetPtr *int
-	)
+	var limitPtr, offsetPtr *int
 	if s := q.Get("limit"); s != "" {
 		v, err := strconv.Atoi(s)
 		if err != nil || v < 0 {

@@ -242,27 +242,30 @@ func TestDefaultTimeFactory_Deadline(t *testing.T) {
 		name      string
 		transport domain.CourierTransportType
 		wantDelta time.Duration
-		wantErr   bool
+		errAssert require.ErrorAssertionFunc
 	}{
 		{
 			name:      "on_foot",
 			transport: domain.TransportTypeFoot,
 			wantDelta: 30 * time.Minute,
+			errAssert: require.NoError,
 		},
 		{
 			name:      "scooter",
 			transport: domain.TransportTypeScooter,
 			wantDelta: 15 * time.Minute,
+			errAssert: require.NoError,
 		},
 		{
 			name:      "car",
 			transport: domain.TransportTypeCar,
 			wantDelta: 5 * time.Minute,
+			errAssert: require.NoError,
 		},
 		{
 			name:      "unknown transport returns error",
 			transport: domain.CourierTransportType("horse"),
-			wantErr:   true,
+			errAssert: require.Error,
 		},
 	}
 
@@ -270,8 +273,8 @@ func TestDefaultTimeFactory_Deadline(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := f.Deadline(tt.transport, now)
 
-			if tt.wantErr {
-				require.Error(t, err)
+			tt.errAssert(t, err)
+			if err != nil {
 				return
 			}
 

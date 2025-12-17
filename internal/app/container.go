@@ -5,23 +5,30 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/dig"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"course-go-avito-Orurh/internal/config"
+	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
 	"course-go-avito-Orurh/internal/http/handlers"
 	"course-go-avito-Orurh/internal/http/router"
+	ordersproto "course-go-avito-Orurh/internal/proto"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/courier"
 	"course-go-avito-Orurh/internal/service/delivery"
+	"course-go-avito-Orurh/internal/service/orders"
+	"course-go-avito-Orurh/internal/transport/kafka"
 )
 
 // ContainerBuilder is a dig container builder.
 type ContainerBuilder struct {
 	dbConnect func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error)
-	logFatalf func(string, ...interface{})
+	logFatalf func(string, ...any)
 }
 
 // NewContainerBuilder returns a new dig container builder
@@ -95,7 +102,7 @@ func provideAll(container *dig.Container, providers ...any) error {
 func registerCore(container *dig.Container, ctx context.Context) error {
 	return provideAll(container,
 		func() context.Context { return ctx },
-		func() *log.Logger { return log.Default() },
+		log.Default,
 		config.Load,
 		func(cfg *config.Config) autoReleaseInterval {
 			return autoReleaseInterval(cfg.Delivery.AutoReleaseInterval)
@@ -117,19 +124,25 @@ func registerService(container *dig.Container) error {
 	return provideAll(container,
 		repository.NewCourierRepo,
 		repository.NewDeliveryRepo,
+
 		func() time.Duration { return 3 * time.Second },
 		func(repo *repository.CourierRepo, timeout time.Duration) *courier.Service {
 			return courier.NewService(repo, timeout)
 		},
-		func() delivery.TimeFactory {
-			return delivery.NewTimeFactory()
-		},
+		delivery.NewTimeFactory,
 		func(
 			repo *repository.DeliveryRepo,
 			timeout time.Duration,
 			factory delivery.TimeFactory,
 		) *delivery.Service {
 			return delivery.NewDeliveryService(repo, factory, timeout)
+		},
+		provideOrdersGateway,
+		orders.NewProcessor,
+		makeOrdersKafka,
+
+		func(cfg *config.Config, h kafka.HandleFunc) (*kafka.Consumer, error) {
+			return kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.GroupID, cfg.Kafka.Topic, h)
 		},
 	)
 }
@@ -155,3 +168,42 @@ func registerHTTP(container *dig.Container) error {
 		serverProvider,
 	)
 }
+
+type ordersConnCloser func() error
+
+func provideOrdersGateway(ctx context.Context, cfg *config.Config) (*ordersgw.GRPCGateway, ordersConnCloser, error) {
+	addr := strings.TrimSpace(cfg.OrderService)
+	if addr == "" {
+		return nil, nil, nil
+	}
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, fmt.Errorf("provideOrdersGateway grpc: %w", err)
+	}
+	client := ordersproto.NewOrdersServiceClient(conn)
+	gw := ordersgw.NewGRPCGateway(client)
+	return gw, func() error { return conn.Close() }, nil
+}
+
+// func provideOrdersGateway(ctx context.Context, cfg *config.Config) (ordersGateway.Gateway, error) {
+
+// 	addr := strings.TrimSpace(cfg.OrderService)
+// 	if addr == "" {
+// 		return nil, nil
+// 	}
+// 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("provideOrdersGateway grpc: %w", err)
+// 	}
+// 	client := ordersproto.NewOrdersServiceClient(conn)
+// 	gw := ordersGateway.NewGRPCGateway(client)
+
+// 	go func() {
+// 		<-ctx.Done()
+// 		if err := conn.Close(); err != nil {
+// 			log.Printf("gRPC gateway: close connection: %v", err)
+// 		}
+// 	}()
+
+// 	return gw, nil
+// }

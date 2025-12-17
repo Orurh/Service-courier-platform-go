@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -85,6 +86,13 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 	if err != nil {
 		return domain.AssignResult{}, err
 	}
+
+	log.Printf("[INFO] event=courier_assigned order_id=%s courier_id=%d transport=%s deadline=%s",
+		result.OrderID,
+		result.CourierID,
+		result.TransportType,
+		result.Deadline.Format(time.RFC3339),
+	)
 
 	return result, nil
 }

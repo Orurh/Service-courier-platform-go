@@ -20,6 +20,9 @@ type Config struct {
 	Port     int
 	DB       DB
 	Delivery Delivery
+
+	OrderService string
+	Kafka        Kafka
 }
 
 // DB stores database settings.
@@ -29,6 +32,13 @@ type DB struct {
 	User string
 	Pass string
 	Name string
+}
+
+// Kafka stores kafka settings.
+type Kafka struct {
+	Brokers []string
+	Topic   string
+	GroupID string
 }
 
 // Delivery stores delivery-related settings.
@@ -99,6 +109,41 @@ func Load() (*Config, error) {
 	deliveryCfg := Delivery{
 		AutoReleaseInterval: autoReleaseInterval,
 	}
+	// orderHost := envOrDefault("ORDER_SERVICE_HOST", "http://localhost:8083")
+	orderHost := envOrDefault("ORDER_SERVICE_HOST", "localhost:50051")
 
-	return &Config{Port: port, DB: db, Delivery: deliveryCfg}, nil
+	kafkaCfg, err := loadKafka()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{Port: port, DB: db, Delivery: deliveryCfg, OrderService: orderHost, Kafka: kafkaCfg}, nil
+}
+
+func loadKafka() (Kafka, error) {
+	brokersCSV := envOrDefault("KAFKA_BROKERS", "kafka:9092")
+	raw := strings.Split(brokersCSV, ",")
+	brokers := make([]string, 0, len(raw))
+	for _, b := range raw {
+		b = strings.TrimSpace(b)
+		if b != "" {
+			brokers = append(brokers, b)
+		}
+	}
+	if len(brokers) == 0 {
+		return Kafka{}, fmt.Errorf("invalid KAFKA_BROKERS: %q", brokersCSV)
+	}
+
+	cfg := Kafka{
+		Brokers: brokers,
+		Topic:   envOrDefault("KAFKA_ORDER_TOPIC", "order.status.changed"),
+		GroupID: envOrDefault("KAFKA_GROUP_ID", "service-courier"),
+	}
+	if cfg.Topic == "" {
+		return Kafka{}, fmt.Errorf("invalid KAFKA_ORDER_TOPIC: empty")
+	}
+	if cfg.GroupID == "" {
+		return Kafka{}, fmt.Errorf("invalid KAFKA_GROUP_ID: empty")
+	}
+	return cfg, nil
 }
