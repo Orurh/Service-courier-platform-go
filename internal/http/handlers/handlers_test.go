@@ -2,6 +2,8 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,10 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 func TestHandlers_Ping(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	rr := httptest.NewRecorder()
@@ -25,14 +31,13 @@ func TestHandlers_Ping(t *testing.T) {
 
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
-
 	require.Equal(t, "pong", body["message"])
 }
 
 func TestHandlers_HealthcheckHead(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodHead, "/healthcheck", nil)
 	rr := httptest.NewRecorder()
@@ -46,7 +51,7 @@ func TestHandlers_HealthcheckHead(t *testing.T) {
 func TestHandlers_NotFound(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent-route", nil)
 	rr := httptest.NewRecorder()
@@ -63,8 +68,7 @@ func TestHandlers_NotFound(t *testing.T) {
 func TestHandlers_New_WithNilLogger(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
-
-	require.NotNil(t, h)
-	require.NotNil(t, h.Logger)
+	require.PanicsWithValue(t, "handlers: logger is nil", func() {
+		_ = handlers.New(nil)
+	})
 }

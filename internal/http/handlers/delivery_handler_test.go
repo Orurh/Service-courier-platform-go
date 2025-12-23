@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +22,10 @@ import (
 type stubDeliveryUsecase struct {
 	assignFn   func(ctx context.Context, orderID string) (domain.AssignResult, error)
 	unassignFn func(ctx context.Context, orderID string) (domain.UnassignResult, error)
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func (s *stubDeliveryUsecase) Assign(ctx context.Context, orderID string) (domain.AssignResult, error) {
@@ -59,7 +65,7 @@ func TestDeliveryHandler_Assign_OK(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 	h.Assign(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -88,7 +94,7 @@ func TestDeliveryHandler_Assign_Invalid(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 	h.Assign(rr, req)
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -110,7 +116,7 @@ func TestDeliveryHandler_Assign_Conflict(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Assign(rr, req)
 
@@ -138,7 +144,7 @@ func TestDeliveryHandler_Assign_InternalError(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Assign(rr, req)
 
@@ -166,7 +172,7 @@ func TestDeliveryHandler_Assign_InvalidJSON(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Assign(rr, req)
 
@@ -198,7 +204,7 @@ func TestDeliveryHandler_Unassign_OK(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 	h.Unassign(rr, req)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
@@ -227,7 +233,7 @@ func TestDeliveryHandler_Unassign_NotFound(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Unassign(rr, req)
 
@@ -255,7 +261,7 @@ func TestDeliveryHandler_Unassign_Invalid(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Unassign(rr, req)
 
@@ -282,7 +288,7 @@ func TestDeliveryHandler_Unassign_InternalError(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 
 	h.Unassign(rr, req)
 
@@ -310,7 +316,7 @@ func TestDeliveryHandler_Unassign_InvalidJSON(t *testing.T) {
 		},
 	}
 
-	h := NewDeliveryHandler(uc)
+	h := NewDeliveryHandler(testLogger(), uc)
 	h.Unassign(rr, req)
 
 	require.Equal(t, http.StatusBadRequest, rr.Code)

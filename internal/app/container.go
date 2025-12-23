@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -27,7 +27,8 @@ import (
 
 // ContainerBuilder is a dig container builder.
 type ContainerBuilder struct {
-	dbConnect func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error)
+	dbConnect func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error)
+
 	logFatalf func(string, ...any)
 }
 
@@ -35,13 +36,13 @@ type ContainerBuilder struct {
 func NewContainerBuilder() *ContainerBuilder {
 	return &ContainerBuilder{
 		dbConnect: connectDbWithRetry,
-		logFatalf: log.Fatalf,
+		logFatalf: func(format string, args ...any) { panic(fmt.Sprintf(format, args...)) },
 	}
 }
 
 // WithDBConnect sets the database connection function
 func (b *ContainerBuilder) WithDBConnect(
-	fn func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error),
+	fn func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
 ) *ContainerBuilder {
 	if fn != nil {
 		b.dbConnect = fn
@@ -50,7 +51,7 @@ func (b *ContainerBuilder) WithDBConnect(
 }
 
 // WithLogFatalf sets the log.Fatalf function
-func (b *ContainerBuilder) WithLogFatalf(fn func(string, ...interface{})) *ContainerBuilder {
+func (b *ContainerBuilder) WithLogFatalf(fn func(string, ...any)) *ContainerBuilder {
 	if fn != nil {
 		b.logFatalf = fn
 	}
@@ -102,7 +103,7 @@ func provideAll(container *dig.Container, providers ...any) error {
 func registerCore(container *dig.Container, ctx context.Context) error {
 	return provideAll(container,
 		func() context.Context { return ctx },
-		log.Default,
+		NewLogger,
 		config.Load,
 		func(cfg *config.Config) autoReleaseInterval {
 			return autoReleaseInterval(cfg.Delivery.AutoReleaseInterval)
@@ -112,10 +113,10 @@ func registerCore(container *dig.Container, ctx context.Context) error {
 
 func registerDb(
 	container *dig.Container,
-	dbConnect func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error),
+	dbConnect func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
 ) error {
-	providerDB := func(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-		return dbConnect(ctx, cfg.DB.DSN(), 10, time.Second)
+	providerDB := func(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*pgxpool.Pool, error) {
+		return dbConnect(ctx, logger, cfg.DB.DSN(), 10, time.Second)
 	}
 	return provideAll(container, providerDB)
 }
@@ -134,15 +135,16 @@ func registerService(container *dig.Container) error {
 			repo *repository.DeliveryRepo,
 			timeout time.Duration,
 			factory delivery.TimeFactory,
+			logger *slog.Logger,
 		) *delivery.Service {
-			return delivery.NewDeliveryService(repo, factory, timeout)
+			return delivery.NewDeliveryService(repo, factory, timeout, logger)
 		},
 		provideOrdersGateway,
 		orders.NewProcessor,
 		makeOrdersKafka,
 
-		func(cfg *config.Config, h kafka.HandleFunc) (*kafka.Consumer, error) {
-			return kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.GroupID, cfg.Kafka.Topic, h)
+		func(cfg *config.Config, h kafka.HandleFunc, logger *slog.Logger) (*kafka.Consumer, error) {
+			return kafka.NewConsumer(logger, cfg.Kafka.Brokers, cfg.Kafka.GroupID, cfg.Kafka.Topic, h)
 		},
 	)
 }
@@ -184,26 +186,3 @@ func provideOrdersGateway(ctx context.Context, cfg *config.Config) (*ordersgw.GR
 	gw := ordersgw.NewGRPCGateway(client)
 	return gw, func() error { return conn.Close() }, nil
 }
-
-// func provideOrdersGateway(ctx context.Context, cfg *config.Config) (ordersGateway.Gateway, error) {
-
-// 	addr := strings.TrimSpace(cfg.OrderService)
-// 	if addr == "" {
-// 		return nil, nil
-// 	}
-// 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-// 	if err != nil {
-// 		return nil, fmt.Errorf("provideOrdersGateway grpc: %w", err)
-// 	}
-// 	client := ordersproto.NewOrdersServiceClient(conn)
-// 	gw := ordersGateway.NewGRPCGateway(client)
-
-// 	go func() {
-// 		<-ctx.Done()
-// 		if err := conn.Close(); err != nil {
-// 			log.Printf("gRPC gateway: close connection: %v", err)
-// 		}
-// 	}()
-
-// 	return gw, nil
-// }

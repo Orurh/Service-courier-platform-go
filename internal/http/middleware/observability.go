@@ -1,15 +1,11 @@
 package middleware
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
-	// "strconv"
-	// "time"
-
-	// "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,7 +25,7 @@ var (
 			Help:    "Duration of HTTP requests.",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"path"},
+		[]string{"method", "path", "status"},
 	)
 )
 
@@ -39,9 +35,9 @@ func init() {
 }
 
 // Observability - middleware for prometheus
-func Observability(logger *log.Logger) func(http.Handler) http.Handler {
+func Observability(logger *slog.Logger) func(http.Handler) http.Handler {
 	if logger == nil {
-		logger = log.Default()
+		panic("observability: logger is nil")
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -50,12 +46,18 @@ func Observability(logger *log.Logger) func(http.Handler) http.Handler {
 			ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor) // через прокси читаем ответ
 			next.ServeHTTP(ww, r)                              // пропускаем дальше
 			path := pathPattern(r)                             // что бы не взорвать прометеус
-			tm := time.Since(start).Seconds()
+			tm := time.Since(start)
+			status := strconv.Itoa(ww.Status())
 
-			httpRequestsTotal.WithLabelValues(r.Method, path, strconv.Itoa(ww.Status())).Inc()
-			httpRequestDuration.WithLabelValues(path).Observe(tm)
+			httpRequestsTotal.WithLabelValues(r.Method, path, status).Inc()
+			httpRequestDuration.WithLabelValues(r.Method, path, status).Observe(tm.Seconds())
 
-			logger.Printf("[INFO] method=%s path=%s status=%d duration=%v", r.Method, path, ww.Status(), tm)
+			logger.Info("http request",
+				slog.String("method", r.Method),
+				slog.String("path", path),
+				slog.Int("status", ww.Status()),
+				slog.Duration("duration", tm),
+			)
 		})
 	}
 }

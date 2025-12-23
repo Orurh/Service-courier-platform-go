@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
@@ -28,23 +27,22 @@ func makeOrdersKafka(p *orders.Processor, gw *ordersgw.GRPCGateway) kafka.Handle
 			return nil
 		}
 
-		if actionClass(event.Status) != actionClass(ord.Status) {
-			return nil
-		}
+		event.Status = ord.Status
+		event.CreatedAt = ord.CreatedAt
 		return p.Handle(ctx, event)
 	}
 }
 
-func actionClass(s string) string {
-	str := strings.ToLower(strings.TrimSpace(s))
-	switch str {
-	case "created", "pending", "confirmed", "cooking", "delivering":
-		return "assign"
-	case "canceled", "deleted":
-		return "unassign"
-	case "completed":
-		return "complete"
-	default:
-		return "ignore"
-	}
-}
+// func actionClass(s string) string {
+// 	str := strings.ToLower(strings.TrimSpace(s))
+// 	switch str {
+// 	case "created", "pending", "confirmed", "cooking", "delivering":
+// 		return "assign"
+// 	case "canceled", "deleted":
+// 		return "unassign"
+// 	case "completed":
+// 		return "complete"
+// 	default:
+// 		return "ignore"
+// 	}
+// }

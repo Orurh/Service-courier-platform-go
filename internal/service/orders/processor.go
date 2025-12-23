@@ -17,6 +17,11 @@ type Processor struct {
 	factory  *actionFactory
 }
 
+// NewProcessorWithDeps creates a Processor from interfaces (handy for tests).
+func NewProcessorWithDeps(deliverySvc DeliveryPort, repo TxRunner) *Processor {
+	return newProcessor(deliverySvc, repo)
+}
+
 type repoAdapter struct {
 	r *repository.DeliveryRepo
 }

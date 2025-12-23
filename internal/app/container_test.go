@@ -3,7 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -16,8 +17,8 @@ import (
 	"course-go-avito-Orurh/internal/http/handlers"
 )
 
-func newTestLogger() *log.Logger {
-	return log.New(log.Writer(), "", 0)
+func newTestLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
 func setupTestContainer(t *testing.T) *dig.Container {
@@ -130,7 +131,7 @@ func TestRegisterCore_ProvidesDependencies(t *testing.T) {
 
 	err = c.Invoke(func(
 		gotCtx context.Context,
-		logger *log.Logger,
+		logger *slog.Logger,
 		cfg *config.Config,
 		interval autoReleaseInterval,
 	) {
@@ -160,11 +161,13 @@ func TestRegisterDb_UsesDbConnectAndProvidesPool(t *testing.T) {
 
 	require.NoError(t, c.Provide(func() context.Context { return ctx }))
 	require.NoError(t, c.Provide(func() *config.Config { return cfg }))
+	require.NoError(t, c.Provide(newTestLogger))
 
 	stubPool := &pgxpool.Pool{}
 
 	stubConnect := func(
 		gotCtx context.Context,
+		logger *slog.Logger,
 		dsn string,
 		retries int,
 		delay time.Duration,
@@ -191,7 +194,7 @@ func TestContainerBuilder_Build_Success(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		})
 
@@ -211,7 +214,7 @@ func TestContainerBuilder_Build_DBError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return nil, fmt.Errorf("db failed")
 		})
 
@@ -232,7 +235,7 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		}).
 		WithLogFatalf(func(format string, args ...interface{}) {

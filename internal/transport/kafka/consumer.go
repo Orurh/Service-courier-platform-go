@@ -3,7 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -20,13 +20,17 @@ type Consumer struct {
 	group   sarama.ConsumerGroup
 	topic   string
 	handler HandleFunc
+	logger  *slog.Logger
 }
 
 // NewConsumer creates a new Kafka consumer
-func NewConsumer(brokers []string, groupID, topic string, h HandleFunc) (*Consumer, error) {
+func NewConsumer(logger *slog.Logger, brokers []string, groupID, topic string, h HandleFunc) (*Consumer, error) {
 	// не стратую если у кафки нет настроек
 	if len(brokers) == 0 || strings.TrimSpace(topic) == "" || strings.TrimSpace(groupID) == "" {
 		return nil, nil
+	}
+	if logger == nil {
+		panic("kafka: loger is nil")
 	}
 
 	cfg := sarama.NewConfig()
@@ -41,6 +45,7 @@ func NewConsumer(brokers []string, groupID, topic string, h HandleFunc) (*Consum
 		group:   group,
 		topic:   topic,
 		handler: h,
+		logger:  logger,
 	}, nil
 }
 
@@ -49,6 +54,20 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+	// я подумал логировать ошибки кафки в отдельной горутине...
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case err, ok := <-c.group.Errors():
+				if !ok {
+					return
+				}
+				c.logger.Error("kafka consumer group error", slog.Any("err", err))
+			}
+		}
+	}()
 
 	h := &groupHandler{c: c}
 
@@ -57,8 +76,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			log.Printf("kafka: consume error: %v", err)
-			time.Sleep(time.Second)
+			c.logger.Error("kafka consume error", slog.Any("err", err))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 		if ctx.Err() != nil {
@@ -85,25 +108,40 @@ func (h *groupHandler) Cleanup(sarama.ConsumerGroupSession) error {
 }
 
 func (h *groupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for msg := range claim.Messages() {
-		var ev orders.Event
-		if err := json.Unmarshal(msg.Value, &ev); err != nil {
-			log.Printf("kafka: bad json: %v", err)
-			sess.MarkMessage(msg, "")
-			continue
-		}
-		if strings.TrimSpace(ev.OrderID) == "" {
-			log.Printf("kafka: empty order_id")
-			sess.MarkMessage(msg, "")
-			continue
-		}
+	for {
+		select {
+		case <-sess.Context().Done():
+			return nil
+		case msg, ok := <-claim.Messages():
+			if !ok {
+				return nil
+			}
 
-		if err := h.c.handler(sess.Context(), ev); err != nil {
-			log.Printf("kafka: handle failed,retry: order_id=%s status=%s err=%v", ev.OrderID, ev.Status, err)
-			return err
-		}
+			var dto EventDTO
+			if err := json.Unmarshal(msg.Value, &dto); err != nil {
+				h.c.logger.Warn("kafka bad json", slog.Any("err", err))
+				sess.MarkMessage(msg, "")
+				continue
+			}
 
-		sess.MarkMessage(msg, "")
+			ev := ToDomain(dto)
+
+			if ev.OrderID == "" {
+				h.c.logger.Warn("kafka empty order_id")
+				sess.MarkMessage(msg, "")
+				continue
+			}
+
+			if err := h.c.handler(sess.Context(), ev); err != nil {
+				h.c.logger.Error("kafka handle failed, skipping message",
+					slog.String("order_id", ev.OrderID),
+					slog.String("status", ev.Status),
+					slog.Any("err", err),
+				)
+				sess.MarkMessage(msg, "")
+				continue
+			}
+			sess.MarkMessage(msg, "")
+		}
 	}
-	return nil
 }

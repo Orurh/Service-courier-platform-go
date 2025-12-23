@@ -30,25 +30,29 @@ func NewGRPCGateway(client ordersproto.OrdersServiceClient) *GRPCGateway {
 	return &GRPCGateway{client: client}
 }
 
+func mapProtoOrder(o *ordersproto.Order) Order {
+	var createdAt time.Time
+	if ts := o.GetCreatedAt(); ts != nil {
+		createdAt = ts.AsTime()
+	}
+	return Order{
+		ID:        o.GetId(),
+		Status:    o.GetStatus(),
+		CreatedAt: createdAt,
+	}
+}
+
 // GetByID fetches an order by ID from the orders service.
 func (g *GRPCGateway) GetByID(ctx context.Context, id string) (*Order, error) {
 	resp, err := g.client.GetOrderById(ctx, &ordersproto.GetOrderByIdRequest{Id: id})
 	if err != nil {
 		return nil, fmt.Errorf("order gateway: GetOrderById: %w", err)
 	}
-	ord := resp.Order
-	if ord == nil {
+	if resp.Order == nil {
 		return nil, nil
 	}
-	var createdAt time.Time
-	if ord.CreatedAt != nil {
-		createdAt = ord.CreatedAt.AsTime()
-	}
-	return &Order{
-		ID:        ord.Id,
-		Status:    ord.Status,
-		CreatedAt: createdAt,
-	}, nil
+	ord := mapProtoOrder(resp.GetOrder())
+	return &ord, nil
 }
 
 // ListFrom список заказов через gRPC, не используется
@@ -61,17 +65,11 @@ func (g *GRPCGateway) ListFrom(ctx context.Context, from time.Time) ([]Order, er
 		return nil, fmt.Errorf("order gateway: GetOrders: %w", err)
 	}
 	orders := make([]Order, 0, len(resp.Orders))
-	for _, o := range resp.Orders {
+	for _, o := range resp.GetOrders() {
 		if o == nil {
 			continue
 		}
-		ord := Order{
-			ID:        o.Id,
-			Status:    o.Status,
-			CreatedAt: o.CreatedAt.AsTime(),
-		}
-
-		orders = append(orders, ord)
+		orders = append(orders, mapProtoOrder(o))
 	}
 
 	return orders, nil

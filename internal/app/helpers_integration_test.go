@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -31,7 +32,7 @@ func TestConnectDbWithRetry_SuccessFirstAttempt(t *testing.T) {
 		return wantPool, nil
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 10*time.Millisecond)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 10*time.Millisecond)
 	require.NoError(t, err)
 	require.Equal(t, wantPool, pool)
 	require.Equal(t, 1, calls)
@@ -49,7 +50,7 @@ func TestConnectDbWithRetry_ExhaustsRetries(t *testing.T) {
 		return nil, sentinelErr
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 0)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 0)
 	require.Error(t, err)
 	require.Nil(t, pool)
 	require.Equal(t, 3, calls)
@@ -67,7 +68,7 @@ func TestConnectDbWithRetry_ContextCanceledBetweenRetries(t *testing.T) {
 		return nil, sentinelErr
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 50*time.Millisecond)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 50*time.Millisecond)
 	require.Error(t, err)
 	require.Nil(t, pool)
 	require.ErrorIs(t, err, context.Canceled)

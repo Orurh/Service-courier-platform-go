@@ -1,8 +1,8 @@
 package config
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -64,8 +64,9 @@ func envOrDefault(key, def string) string {
 func Load() (*Config, error) {
 	flagsMu.Lock()
 	defer flagsMu.Unlock()
-	if err := godotenv.Load(".env"); err != nil {
-		log.Printf("warning: .env not loaded: %v", err)
+	// возвращаем ошибку на верх, но не выходим
+	if err := godotenv.Load(".env"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load .env: %w", err)
 	}
 
 	port := 8080

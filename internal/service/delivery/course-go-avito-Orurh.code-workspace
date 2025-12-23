@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"name": "course-go-avito-Orurh",
+			"path": "../../.."
+		},
+		{
+			"name": "service-order",
+			"path": "../../../../service-order"
+		},
+		{
+			"name": "yandex",
+			"path": "../../../../../yandex"
+		},
+		{
+			"path": "../../../../SimVizEngine"
+		},
+		{
+			"path": "../../../../infrastructure"
+		},
+		{
+			"path": "../../../../test"
+		},
+		{
+			"path": "../../../../l9-examples"
+		}
+	],
+	"settings": {}
+}

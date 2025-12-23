@@ -3,6 +3,8 @@ package delivery_test
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -14,8 +16,12 @@ import (
 	"course-go-avito-Orurh/internal/service/delivery"
 )
 
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 func newTestDeliveryService(repo *MockdeliveryRepository, f delivery.TimeFactory) *delivery.Service {
-	return delivery.NewDeliveryService(repo, f, 3*time.Second)
+	return delivery.NewDeliveryService(repo, f, 3*time.Second, testLogger())
 }
 
 func TestService_Assign_Success(t *testing.T) {
@@ -554,7 +560,7 @@ func TestNewDeliveryService_ZeroTimeoutUsesDefault_Behavior(t *testing.T) {
 	repo := NewMockdeliveryRepository(ctrl)
 	factory := NewMockTimeFactory(ctrl)
 
-	svc := delivery.NewDeliveryService(repo, factory, 0)
+	svc := delivery.NewDeliveryService(repo, factory, 0, testLogger())
 
 	ctx := context.Background()
 	orderID := "order_1"

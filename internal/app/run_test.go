@@ -1,11 +1,11 @@
 package app
 
 import (
+	"bytes"
 	"context"
-	// "errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"testing"
@@ -19,6 +19,10 @@ import (
 	"course-go-avito-Orurh/internal/service/delivery"
 	"course-go-avito-Orurh/internal/transport/kafka"
 )
+
+func testLogger(w io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
+}
 
 type fakeDeliveryRepo struct {
 	mu           sync.Mutex
@@ -65,9 +69,8 @@ func TestStartAutoReleaseLoop_CallsReleaseExpired(t *testing.T) {
 	defer cancel()
 
 	repo := &fakeDeliveryRepo{}
-	svc := delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second)
-
-	logger := log.New(io.Discard, "", 0)
+	logger := testLogger(io.Discard)
+	svc := delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second, logger)
 
 	startAutoReleaseLoop(ctx, logger, svc, 10*time.Millisecond)
 
@@ -77,31 +80,6 @@ func TestStartAutoReleaseLoop_CallsReleaseExpired(t *testing.T) {
 	require.Greater(t, repo.ReleaseCalls(), 0)
 }
 
-// func TestWaitForShutdown_LogsOnCtxDone(t *testing.T) {
-// 	t.Parallel()
-
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-
-// 	var buf bytes.Buffer
-// 	logger := log.New(&buf, "", 0)
-
-// 	done := make(chan struct{})
-// 	go func() {
-// 		waitForShutdown(ctx, logger)
-// 		close(done)
-// 	}()
-
-// 	cancel()
-
-// 	select {
-// 	case <-done:
-// 	case <-time.After(time.Second):
-// 		require.FailNow(t, "waitForShutdown did not return after cancel")
-// 	}
-// 	require.Contains(t, buf.String(), "shutting down service-courier")
-// }
-
 func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +87,7 @@ func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
 		Addr:    "127.0.0.1:0",
 		Handler: http.NewServeMux(),
 	}
-	logger := log.New(io.Discard, "", 0)
+	logger := testLogger(io.Discard)
 
 	require.NotPanics(t, func() {
 		gracefulShutdown(srv, logger, 100*time.Millisecond)
@@ -124,7 +102,7 @@ func TestCloseResources_DoesNotPanic(t *testing.T) {
 		Handler: http.NewServeMux(),
 	}
 	var pool *pgxpool.Pool
-	logger := log.New(io.Discard, "", 0)
+	logger := testLogger(io.Discard)
 
 	require.NotPanics(t, func() {
 		closeResources(pool, srv, logger, nil, nil)
@@ -142,10 +120,10 @@ func TestAppRun_FullFlow_WithCancelledCtx(t *testing.T) {
 		Handler: http.NewServeMux(),
 	}
 	var pool *pgxpool.Pool
-	logger := log.New(io.Discard, "", 0)
+	logger := testLogger(io.Discard)
 
 	repo := &fakeDeliveryRepo{}
-	svc := delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second)
+	svc := delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second, logger)
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -159,66 +137,39 @@ func TestAppRun_FullFlow_WithCancelledCtx(t *testing.T) {
 func TestMustRun_ShutdownRequested(t *testing.T) {
 	t.Parallel()
 
-	var logged string
+	var buf bytes.Buffer
+	container := dig.New()
+	require.NoError(t, container.Provide(func() *slog.Logger {
+		return testLogger(&buf)
+	}))
 
 	r := &Runner{
 		runFn: func(_ *dig.Container) error {
 			return context.Canceled
 		},
-		logPrintln: func(v ...any) {
-			logged = fmt.Sprint(v...)
-		},
-		logFatalf: func(string, ...any) {
-			require.FailNow(t, "logFatalf must not be called for context. Canceled")
-		},
 	}
-	r.MustRun(nil)
-	require.Contains(t, logged, "shutdown requested")
+	r.MustRun(container)
+	require.Contains(t, buf.String(), "shutdown requested, exiting")
 }
 
 func TestRunner_MustRun_StartupTimeout(t *testing.T) {
 	t.Parallel()
 
-	var logged string
+	var buf bytes.Buffer
+	container := dig.New()
+	require.NoError(t, container.Provide(func() *slog.Logger {
+		return testLogger(&buf)
+	}))
 
 	r := &Runner{
 		runFn: func(_ *dig.Container) error {
 			return context.DeadlineExceeded
 		},
-		logPrintln: func(v ...any) {
-			logged = fmt.Sprint(v...)
-		},
-		logFatalf: func(string, ...any) {
-			require.FailNow(t, "logFatalf must not be called for context.Canceled")
-		},
 	}
 
-	r.MustRun(nil)
-
-	require.Contains(t, logged, "startup aborted: startup timeout exceeded")
+	r.MustRun(container)
+	require.Contains(t, buf.String(), "startup aborted: startup timeout exceeded")
 }
-
-// func TestRunner_MustRun_FatalOnOtherErrors(t *testing.T) {
-// 	t.Parallel()
-
-// 	var logged string
-
-// 	r := &Runner{
-// 		runFn: func(_ *dig.Container) error {
-// 			return errors.New("boom")
-// 		},
-// 		logPrintln: func(...any) {
-// 			require.FailNow(t, "logPrintln must not be called for generic error")
-// 		},
-// 		logFatalf: func(format string, args ...any) {
-// 			logged = fmt.Sprintf(format, args...)
-// 		},
-// 	}
-
-// 	r.MustRun(nil)
-// 	require.Contains(t, logged, "run error:")
-// 	require.Contains(t, logged, "boom")
-// }
 
 func TestNewRunner_DefaultFields(t *testing.T) {
 	t.Parallel()
@@ -227,11 +178,7 @@ func TestNewRunner_DefaultFields(t *testing.T) {
 	require.NotNil(t, r)
 
 	require.NotNil(t, r.runFn)
-	require.NotNil(t, r.logPrintln)
-	require.NotNil(t, r.logFatalf)
 	require.Equal(t, fmt.Sprintf("%p", run), fmt.Sprintf("%p", r.runFn))
-	require.Equal(t, fmt.Sprintf("%p", log.Println), fmt.Sprintf("%p", r.logPrintln))
-	require.Equal(t, fmt.Sprintf("%p", log.Fatalf), fmt.Sprintf("%p", r.logFatalf))
 }
 
 func TestRun_InvokesAppRunViaContainer(t *testing.T) {
@@ -246,8 +193,8 @@ func TestRun_InvokesAppRunViaContainer(t *testing.T) {
 		return ctx
 	}))
 
-	require.NoError(t, container.Provide(func() *log.Logger {
-		return log.New(io.Discard, "", 0)
+	require.NoError(t, container.Provide(func() *slog.Logger {
+		return testLogger(io.Discard)
 	}))
 
 	require.NoError(t, container.Provide(func() *pgxpool.Pool {
@@ -265,9 +212,9 @@ func TestRun_InvokesAppRunViaContainer(t *testing.T) {
 		return autoReleaseInterval(10 * time.Millisecond)
 	}))
 
-	require.NoError(t, container.Provide(func() *delivery.Service {
+	require.NoError(t, container.Provide(func(logger *slog.Logger) *delivery.Service {
 		repo := &fakeDeliveryRepo{}
-		return delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second)
+		return delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second, logger)
 	}))
 
 	require.NoError(t, container.Provide(func() *kafka.Consumer {

@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,7 +13,10 @@ import (
 
 var newPool = repository.NewPool
 
-func connectDbWithRetry(ctx context.Context, dsn string, retries int, delay time.Duration) (*pgxpool.Pool, error) {
+func connectDbWithRetry(ctx context.Context, logger *slog.Logger, dsn string, retries int, delay time.Duration) (*pgxpool.Pool, error) {
+	if logger == nil {
+		panic("db: logger is nil")
+	}
 	var lastErr error
 	const attemptTimeout = 3 * time.Second
 	for i := 1; i <= retries; i++ {
@@ -21,11 +24,11 @@ func connectDbWithRetry(ctx context.Context, dsn string, retries int, delay time
 		pool, err := newPool(retriesCtx, dsn)
 		cancel()
 		if err == nil {
-			log.Printf("db connected on attempt %d", i)
+			logger.Info("db connected", slog.Int("attempt", i))
 			return pool, nil
 		}
 		lastErr = err
-		log.Printf("db connect failed (attempt %d/%d): %v", i, retries, err)
+		logger.Warn("db connect failed", slog.Int("attempt", i), slog.Int("retries", retries), slog.Any("err", err))
 		if i < retries {
 			select {
 			case <-ctx.Done():

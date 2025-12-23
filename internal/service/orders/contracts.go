@@ -1,3 +1,5 @@
+//go:generate mockgen -source=contracts.go -destination=orders_mocks_test.go -package=orders_test
+
 package orders
 
 import (

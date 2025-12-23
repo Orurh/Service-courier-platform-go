@@ -6,7 +6,7 @@ import (
 
 // Event is a single order event
 type Event struct {
-	OrderID   string    `json:"order_id"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	OrderID   string
+	Status    string
+	CreatedAt time.Time
 }
