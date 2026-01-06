@@ -3,17 +3,17 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/repository"
 )
 
 var newPool = repository.NewPool
 
-func connectDbWithRetry(ctx context.Context, dsn string, retries int, delay time.Duration) (*pgxpool.Pool, error) {
+func connectDbWithRetry(ctx context.Context, logger logx.Logger, dsn string, retries int, delay time.Duration) (*pgxpool.Pool, error) {
 	var lastErr error
 	const attemptTimeout = 3 * time.Second
 	for i := 1; i <= retries; i++ {
@@ -21,11 +21,11 @@ func connectDbWithRetry(ctx context.Context, dsn string, retries int, delay time
 		pool, err := newPool(retriesCtx, dsn)
 		cancel()
 		if err == nil {
-			log.Printf("db connected on attempt %d", i)
+			logger.Info("db connected", logx.Int("attempt", i))
 			return pool, nil
 		}
 		lastErr = err
-		log.Printf("db connect failed (attempt %d/%d): %v", i, retries, err)
+		logger.Warn("db connect failed", logx.Int("attempt", i), logx.Int("retries", retries), logx.Any("err", err))
 		if i < retries {
 			select {
 			case <-ctx.Done():

@@ -91,7 +91,6 @@ func (r *CourierRepo) UpdatePartial(ctx context.Context, u domain.PartialCourier
             updated_at     = now()
         WHERE id = $1
     `, u.ID, u.Name, u.Phone, u.Status, u.TransportType)
-
 	if err != nil {
 		if IsDuplicate(err) {
 			return false, apperr.ErrConflict

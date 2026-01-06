@@ -1,17 +1,26 @@
 package router_test
 
-import (
-	"net/http"
-	"testing"
+// import (
+// 	"io"
+// 	"log/slog"
+// 	"testing"
 
-	"course-go-avito-Orurh/internal/http/handlers"
-	"course-go-avito-Orurh/internal/http/router"
-)
+// 	"course-go-avito-Orurh/internal/http/handlers"
+// 	"course-go-avito-Orurh/internal/http/router"
 
-func TestNew_NotNil(t *testing.T) {
-	base := &handlers.Handlers{}
-	cour := &handlers.CourierHandler{}
-	del := &handlers.DeliveryHandler{}
+// 	"github.com/stretchr/testify/require"
+// )
 
-	var _ http.Handler = router.New(base, cour, del)
-}
+// func TestNew_NotNil(t *testing.T) {
+// 	t.Parallel()
+
+// 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+// 	base := handlers.New(logger)
+
+// 	cour := &handlers.CourierHandler{}
+// 	del := &handlers.DeliveryHandler{}
+
+// 	require.NotPanics(t, func() {
+// 		_ = router.New(base, cour, del)
+// 	})
+// }

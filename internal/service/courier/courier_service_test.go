@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"course-go-avito-Orurh/internal/apperr"
@@ -58,7 +59,7 @@ func TestService_Get_NotFound(t *testing.T) {
 func TestService_Get_RepoError(t *testing.T) {
 	t.Parallel()
 
-	wantErr := errors.New("boom")
+	wantErr := assert.AnError
 
 	ctrl := gomock.NewController(t)
 

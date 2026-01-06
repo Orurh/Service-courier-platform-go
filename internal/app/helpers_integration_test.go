@@ -4,13 +4,17 @@ package app
 
 import (
 	"context"
+	"course-go-avito-Orurh/internal/logx"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
+
+func testLogger(_ io.Writer) logx.Logger { return logx.Nop() }
 
 func withStubNewPool(t *testing.T, stub func(context.Context, string) (*pgxpool.Pool, error)) {
 	t.Helper()
@@ -31,7 +35,7 @@ func TestConnectDbWithRetry_SuccessFirstAttempt(t *testing.T) {
 		return wantPool, nil
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 10*time.Millisecond)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 10*time.Millisecond)
 	require.NoError(t, err)
 	require.Equal(t, wantPool, pool)
 	require.Equal(t, 1, calls)
@@ -49,7 +53,7 @@ func TestConnectDbWithRetry_ExhaustsRetries(t *testing.T) {
 		return nil, sentinelErr
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 0)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 0)
 	require.Error(t, err)
 	require.Nil(t, pool)
 	require.Equal(t, 3, calls)
@@ -67,7 +71,7 @@ func TestConnectDbWithRetry_ContextCanceledBetweenRetries(t *testing.T) {
 		return nil, sentinelErr
 	})
 
-	pool, err := connectDbWithRetry(ctx, dsn, 3, 50*time.Millisecond)
+	pool, err := connectDbWithRetry(ctx, testLogger(io.Discard), dsn, 3, 50*time.Millisecond)
 	require.Error(t, err)
 	require.Nil(t, pool)
 	require.ErrorIs(t, err, context.Canceled)

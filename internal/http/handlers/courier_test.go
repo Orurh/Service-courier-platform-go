@@ -62,7 +62,7 @@ func TestCourierHandler_GetByID_OK(t *testing.T) {
 		},
 	}
 
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/99", nil)
 	routeCtx := chi.NewRouteContext()
@@ -86,7 +86,7 @@ func TestCourierHandler_GetByID_OK(t *testing.T) {
 func TestCourierHandler_GetByID_InvalidID(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(testLogger(), &stubCourierUsecase{
 		getFn: func(ctx context.Context, id int64) (*domain.Courier, error) {
 			require.FailNow(t, "usecase.Get should not be called on invalid id")
 			return nil, nil
@@ -112,7 +112,7 @@ func TestCourierHandler_GetByID_NotFound(t *testing.T) {
 			return nil, apperr.ErrNotFound
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/10", nil)
 	routeCtx := chi.NewRouteContext()
@@ -133,7 +133,7 @@ func TestCourierHandler_GetByID_InternalError(t *testing.T) {
 			return nil, errors.New("db down")
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/courier/10", nil)
 	routeCtx := chi.NewRouteContext()
@@ -162,7 +162,7 @@ func TestCourierHandler_List_OK(t *testing.T) {
 			return expected, nil
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/couriers?limit=10&offset=5", nil)
 	rr := httptest.NewRecorder()
@@ -184,7 +184,7 @@ func TestCourierHandler_List_OK(t *testing.T) {
 func TestCourierHandler_List_InvalidLimit(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(testLogger(), &stubCourierUsecase{
 		listFn: func(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
 			require.FailNow(t, "List should not be called when limit is invalid")
 			return nil, nil
@@ -202,7 +202,7 @@ func TestCourierHandler_List_InvalidLimit(t *testing.T) {
 func TestCourierHandler_List_InvalidOffset(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.NewCourierHandler(&stubCourierUsecase{
+	h := handlers.NewCourierHandler(testLogger(), &stubCourierUsecase{
 		listFn: func(ctx context.Context, limit, offset *int) ([]domain.Courier, error) {
 			require.FailNow(t, "List should not be called when offset is invalid")
 			return nil, nil
@@ -225,7 +225,7 @@ func TestCourierHandler_List_InternalError(t *testing.T) {
 			return nil, errors.New("db error")
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	req := httptest.NewRequest(http.MethodGet, "/couriers", nil)
 	rr := httptest.NewRecorder()
@@ -246,7 +246,7 @@ func TestCourierHandler_Create_OK(t *testing.T) {
 			return 42, nil
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"name":"Artem","phone":"+70000000000","status":"available","transport_type":"on_foot"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -268,7 +268,7 @@ func TestCourierHandler_Create_Invalid(t *testing.T) {
 			return 0, apperr.ErrInvalid
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"name":"","phone":"bad"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -287,7 +287,7 @@ func TestCourierHandler_Create_Conflict(t *testing.T) {
 			return 0, apperr.ErrConflict
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"name":"Artem","phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -306,7 +306,7 @@ func TestCourierHandler_Create_InternalError(t *testing.T) {
 			return 0, errors.New("db error")
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"name":"Artem","phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -328,7 +328,7 @@ func TestCourierHandler_Update_OK(t *testing.T) {
 			return true, nil
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id":1,"name":"New Name"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -350,7 +350,7 @@ func TestCourierHandler_Update_Invalid(t *testing.T) {
 			return false, apperr.ErrInvalid
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id":0}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -369,7 +369,7 @@ func TestCourierHandler_Update_Conflict(t *testing.T) {
 			return false, apperr.ErrConflict
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id":1,"phone":"+70000000000"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -388,7 +388,7 @@ func TestCourierHandler_Update_NotFound(t *testing.T) {
 			return false, apperr.ErrNotFound
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id":123,"name":"X"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -407,7 +407,7 @@ func TestCourierHandler_Update_InternalError(t *testing.T) {
 			return false, errors.New("db error")
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id":1,"name":"X"}`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))
@@ -427,7 +427,7 @@ func TestCourierHandler_Create_BadJSON(t *testing.T) {
 			return 0, nil
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"name": "Artem", "phone": "+70000000000",`
 	req := httptest.NewRequest(http.MethodPost, "/courier", strings.NewReader(body))
@@ -447,7 +447,7 @@ func TestCourierHandler_Update_BadJSON(t *testing.T) {
 			return false, nil
 		},
 	}
-	h := handlers.NewCourierHandler(uc)
+	h := handlers.NewCourierHandler(testLogger(), uc)
 
 	body := `{"id": 1, "name": "New Name"`
 	req := httptest.NewRequest(http.MethodPut, "/courier", strings.NewReader(body))

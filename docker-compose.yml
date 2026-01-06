@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:15 
-    container_name: my-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER} 
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} 
@@ -10,7 +9,105 @@ services:
       - pgdata:/var/lib/postgresql/data 
     ports:
       - "${POSTGRES_PORT}:5432"
+    networks:
+      - infrastructure_default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+
+  migrate:
+    image: ghcr.io/kukymbr/goose-docker:3.26.0
+    command: ["up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - infrastructure_default
+    environment:
+      - GOOSE_DRIVER=postgres
+      - GOOSE_DBSTRING=host=postgres port=5432 user=${POSTGRES_USER} password=${POSTGRES_PASSWORD} dbname=${POSTGRES_DB} sslmode=disable
+    volumes:
+      - ./db/migrations:/migrations:ro
+
+  
+
+  service-courier:
+    build: .
+    ports:
+      - "${COURIER_PORT}:8080"
+    environment:
+      - PORT=8080
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - ORDER_SERVICE_HOST=service-order:50051
+
+      # - KAFKA_BROKERS=${KAFKA_BROKERS}
+      # - KAFKA_ORDER_TOPIC=${KAFKA_ORDER_TOPIC}
+      # - KAFKA_GROUP_ID=${KAFKA_GROUP_ID}
+    networks:
+      - infrastructure_default
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  
+  service-courier-worker:
+    build: .
+    entrypoint: ["/service-courier-worker"]
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - ORDER_SERVICE_HOST=service-order:50051
+
+      - KAFKA_BROKERS=${KAFKA_BROKERS}
+      - KAFKA_ORDER_TOPIC=${KAFKA_ORDER_TOPIC}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID}
+    networks:
+      - infrastructure_default
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - infrastructure_default
+    depends_on:
+      - service-courier
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - infrastructure_default
+    depends_on:
+      - prometheus
+
+
 
 volumes:
   pgdata:
+  prometheus-data:
+  grafana-data:
 
+networks:
+  infrastructure_default:
+    external: true

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -14,10 +13,11 @@ import (
 
 	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/logx"
 )
 
-func newTestLogger() *log.Logger {
-	return log.New(log.Writer(), "", 0)
+func newTestLogger() logx.Logger {
+	return logx.Nop()
 }
 
 func setupTestContainer(t *testing.T) *dig.Container {
@@ -29,9 +29,14 @@ func setupTestContainer(t *testing.T) *dig.Container {
 		name     string
 		provider any
 	}{
-		{"context", func() context.Context { return context.Background() }},
-		{"logger", func() *log.Logger { return newTestLogger() }},
-		{"config", func() *config.Config { return &config.Config{Port: 8080} }},
+		{"context", context.Background},
+		{"logger", newTestLogger},
+		{"config", func() *config.Config {
+			return &config.Config{
+				Port:         8080,
+				OrderService: "localhost:50051",
+			}
+		}},
 		{"pgxpool", func() *pgxpool.Pool { return &pgxpool.Pool{} }},
 	}
 
@@ -40,7 +45,7 @@ func setupTestContainer(t *testing.T) *dig.Container {
 		require.NoErrorf(t, err, "provide %s", p.name)
 	}
 
-	require.NoError(t, registerService(c))
+	require.NoError(t, registerDomainServices(c))
 	require.NoError(t, registerHTTP(c))
 
 	return c
@@ -92,7 +97,7 @@ func TestProvideAll_Success(t *testing.T) {
 	c := dig.New()
 
 	err := provideAll(c,
-		func() context.Context { return context.Background() },
+		context.Background,
 		func() time.Duration { return 3 * time.Second },
 	)
 	require.NoError(t, err)
@@ -125,7 +130,7 @@ func TestRegisterCore_ProvidesDependencies(t *testing.T) {
 
 	err = c.Invoke(func(
 		gotCtx context.Context,
-		logger *log.Logger,
+		logger logx.Logger,
 		cfg *config.Config,
 		interval autoReleaseInterval,
 	) {
@@ -155,11 +160,13 @@ func TestRegisterDb_UsesDbConnectAndProvidesPool(t *testing.T) {
 
 	require.NoError(t, c.Provide(func() context.Context { return ctx }))
 	require.NoError(t, c.Provide(func() *config.Config { return cfg }))
+	require.NoError(t, c.Provide(newTestLogger))
 
 	stubPool := &pgxpool.Pool{}
 
 	stubConnect := func(
 		gotCtx context.Context,
+		logger logx.Logger,
 		dsn string,
 		retries int,
 		delay time.Duration,
@@ -186,7 +193,7 @@ func TestContainerBuilder_Build_Success(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		})
 
@@ -206,7 +213,7 @@ func TestContainerBuilder_Build_DBError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return nil, fmt.Errorf("db failed")
 		})
 
@@ -227,7 +234,7 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		}).
 		WithLogFatalf(func(format string, args ...interface{}) {
@@ -237,3 +244,14 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	c := builder.MustBuild(ctx)
 	require.NotNil(t, c)
 }
+
+// func TestRegisterService_ProvidesOrderGateway(t *testing.T) {
+// 	t.Parallel()
+
+// 	c := setupTestContainer(t)
+
+// 	err := c.Invoke(func(gw ordergateway.Gateway) {
+// 		require.NotNil(t, gw)
+// 	})
+// 	require.NoError(t, err)
+// }

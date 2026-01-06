@@ -7,14 +7,17 @@ import (
 	"testing"
 
 	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/logx"
 
 	"github.com/stretchr/testify/require"
 )
 
+func testLogger() logx.Logger { return logx.Nop() }
+
 func TestHandlers_Ping(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	rr := httptest.NewRecorder()
@@ -22,17 +25,17 @@ func TestHandlers_Ping(t *testing.T) {
 	h.Ping(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Header().Get("Content-Type"), "application/json")
 
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
-
 	require.Equal(t, "pong", body["message"])
 }
 
 func TestHandlers_HealthcheckHead(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodHead, "/healthcheck", nil)
 	rr := httptest.NewRecorder()
@@ -46,7 +49,7 @@ func TestHandlers_HealthcheckHead(t *testing.T) {
 func TestHandlers_NotFound(t *testing.T) {
 	t.Parallel()
 
-	h := handlers.New(nil)
+	h := handlers.New(testLogger())
 
 	req := httptest.NewRequest(http.MethodGet, "/nonexistent-route", nil)
 	rr := httptest.NewRecorder()
@@ -54,17 +57,11 @@ func TestHandlers_NotFound(t *testing.T) {
 	h.NotFound(rr, req)
 
 	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Contains(t, rr.Header().Get("Content-Type"), "application/json")
 
-	var body map[string]string
+	var body struct {
+		Error string `json:"error"`
+	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
-	require.Contains(t, body["error"], "route not found")
-}
-
-func TestHandlers_New_WithNilLogger(t *testing.T) {
-	t.Parallel()
-
-	h := handlers.New(nil)
-
-	require.NotNil(t, h)
-	require.NotNil(t, h.Logger)
+	require.Contains(t, body.Error, "route not found")
 }

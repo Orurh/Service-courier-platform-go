@@ -7,6 +7,7 @@ import (
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/logx"
 )
 
 // Service - service for assigning deliveries to couriers.
@@ -14,6 +15,7 @@ type Service struct {
 	repo             deliveryRepository
 	factory          TimeFactory
 	operationTimeout time.Duration
+	logger           logx.Logger
 }
 
 func (s *Service) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -21,7 +23,7 @@ func (s *Service) withTimeout(ctx context.Context) (context.Context, context.Can
 }
 
 // NewDeliveryService - creates a new DeliveryService.
-func NewDeliveryService(r deliveryRepository, f TimeFactory, timeout time.Duration) *Service {
+func NewDeliveryService(r deliveryRepository, f TimeFactory, timeout time.Duration, logger logx.Logger) *Service {
 	if timeout <= 0 {
 		timeout = 3 * time.Second
 	}
@@ -29,6 +31,7 @@ func NewDeliveryService(r deliveryRepository, f TimeFactory, timeout time.Durati
 		repo:             r,
 		factory:          f,
 		operationTimeout: timeout,
+		logger:           logger,
 	}
 }
 
@@ -85,6 +88,14 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 	if err != nil {
 		return domain.AssignResult{}, err
 	}
+
+	s.logger.Info("courier assigned",
+		logx.String("event", "courier_assigned"),
+		logx.String("order_id", result.OrderID),
+		logx.Int64("courier_id", result.CourierID),
+		logx.String("transport", string(result.TransportType)),
+		logx.Time("deadline", result.Deadline),
+	)
 
 	return result, nil
 }
