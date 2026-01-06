@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -17,6 +16,7 @@ import (
 	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
 	"course-go-avito-Orurh/internal/http/handlers"
 	"course-go-avito-Orurh/internal/http/router"
+	"course-go-avito-Orurh/internal/logx"
 	ordersproto "course-go-avito-Orurh/internal/proto"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/courier"
@@ -25,9 +25,13 @@ import (
 	"course-go-avito-Orurh/internal/transport/kafka"
 )
 
+func MustBuildWorkerContainer(ctx context.Context) *dig.Container {
+	return NewContainerBuilder().MustBuildWorker(ctx)
+}
+
 // ContainerBuilder is a dig container builder.
 type ContainerBuilder struct {
-	dbConnect func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error)
+	dbConnect func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error)
 
 	logFatalf func(string, ...any)
 }
@@ -42,7 +46,7 @@ func NewContainerBuilder() *ContainerBuilder {
 
 // WithDBConnect sets the database connection function
 func (b *ContainerBuilder) WithDBConnect(
-	fn func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
+	fn func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
 ) *ContainerBuilder {
 	if fn != nil {
 		b.dbConnect = fn
@@ -77,11 +81,37 @@ func (b *ContainerBuilder) build(ctx context.Context) (*dig.Container, error) {
 	if err := registerDb(container, b.dbConnect); err != nil {
 		return nil, fmt.Errorf("DB: %w", err)
 	}
-	if err := registerService(container); err != nil {
+	if err := registerDomainServices(container); err != nil {
 		return nil, fmt.Errorf("service: %w", err)
 	}
 	if err := registerHTTP(container); err != nil {
 		return nil, fmt.Errorf("http: %w", err)
+	}
+	return container, nil
+}
+
+func (b *ContainerBuilder) MustBuildWorker(ctx context.Context) *dig.Container {
+	container, err := b.buildWorker(ctx)
+	if err != nil {
+		b.logFatalf("failed to build worker container: %v", err)
+	}
+	return container
+}
+
+func (b *ContainerBuilder) buildWorker(ctx context.Context) (*dig.Container, error) {
+	container := dig.New()
+
+	if err := registerCore(container, ctx); err != nil {
+		return nil, fmt.Errorf("core: %w", err)
+	}
+	if err := registerDb(container, b.dbConnect); err != nil {
+		return nil, fmt.Errorf("DB: %w", err)
+	}
+	if err := registerDomainServices(container); err != nil {
+		return nil, fmt.Errorf("service: %w", err)
+	}
+	if err := registerWorker(container); err != nil {
+		return nil, fmt.Errorf("worker: %w", err)
 	}
 	return container, nil
 }
@@ -113,15 +143,15 @@ func registerCore(container *dig.Container, ctx context.Context) error {
 
 func registerDb(
 	container *dig.Container,
-	dbConnect func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
+	dbConnect func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error),
 ) error {
-	providerDB := func(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*pgxpool.Pool, error) {
+	providerDB := func(ctx context.Context, cfg *config.Config, logger logx.Logger) (*pgxpool.Pool, error) {
 		return dbConnect(ctx, logger, cfg.DB.DSN(), 10, time.Second)
 	}
 	return provideAll(container, providerDB)
 }
 
-func registerService(container *dig.Container) error {
+func registerDomainServices(container *dig.Container) error {
 	return provideAll(container,
 		repository.NewCourierRepo,
 		repository.NewDeliveryRepo,
@@ -135,16 +165,28 @@ func registerService(container *dig.Container) error {
 			repo *repository.DeliveryRepo,
 			timeout time.Duration,
 			factory delivery.TimeFactory,
-			logger *slog.Logger,
+			logger logx.Logger,
 		) *delivery.Service {
 			return delivery.NewDeliveryService(repo, factory, timeout, logger)
 		},
+	)
+}
+
+func registerWorker(container *dig.Container) error {
+	return provideAll(container,
 		provideOrdersGateway,
 		orders.NewProcessor,
 		makeOrdersKafka,
 
-		func(cfg *config.Config, h kafka.HandleFunc, logger *slog.Logger) (*kafka.Consumer, error) {
-			return kafka.NewConsumer(logger, cfg.Kafka.Brokers, cfg.Kafka.GroupID, cfg.Kafka.Topic, h)
+		func(cfg *config.Config, h kafka.HandleFunc, logger logx.Logger) (*kafka.Consumer, error) {
+			c, err := kafka.NewConsumer(logger, cfg.Kafka.Brokers, cfg.Kafka.GroupID, cfg.Kafka.Topic, h)
+			if err != nil {
+				return nil, err
+			}
+			if c == nil {
+				return nil, fmt.Errorf("kafka config is missing: worker requires KAFKA_BROKERS/KAFKA_GROUP_ID/KAFKA_TOPIC")
+			}
+			return c, nil
 		},
 	)
 }

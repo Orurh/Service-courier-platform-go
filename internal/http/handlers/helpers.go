@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"strconv"
+
+	"course-go-avito-Orurh/internal/logx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,14 +22,11 @@ func reqID(ctx context.Context) string {
 }
 
 // логгер обязательный
-func mustLogger(logger *slog.Logger) *slog.Logger {
-	if logger == nil {
-		panic("handlers: logger is nil")
-	}
+func mustLogger(logger logx.Logger) logx.Logger {
 	return logger
 }
 
-func writeJSON(logger *slog.Logger, w http.ResponseWriter, r *http.Request, status int, v any) {
+func writeJSON(logger logx.Logger, w http.ResponseWriter, r *http.Request, status int, v any) {
 	logger = mustLogger(logger)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -36,7 +34,7 @@ func writeJSON(logger *slog.Logger, w http.ResponseWriter, r *http.Request, stat
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
-		logger.Error("json encode error", slog.String("req_id", reqID(r.Context())), slog.Any("err", err))
+		logger.Error("json encode error", logx.String("req_id", reqID(r.Context())), logx.Any("err", err))
 	}
 }
 
@@ -44,9 +42,9 @@ type errResponse struct {
 	Error string `json:"error"`
 }
 
-func writeError(logger *slog.Logger, w http.ResponseWriter, r *http.Request, status int, msg string) {
+func writeError(logger logx.Logger, w http.ResponseWriter, r *http.Request, status int, msg string) {
 	logger = mustLogger(logger)
-	logger.Warn("http_error", slog.String("req_id", reqID(r.Context())), slog.Int("status", status), slog.String("msg", msg))
+	logger.Warn("http_error", logx.String("req_id", reqID(r.Context())), logx.Int("status", status), logx.String("msg", msg))
 	writeJSON(logger, w, r, status, errResponse{Error: msg})
 }
 
@@ -54,7 +52,7 @@ const (
 	bodyLimit = 1 << 20
 )
 
-func decodeJSON[T any](logger *slog.Logger, w http.ResponseWriter, r *http.Request, dst *T) bool {
+func decodeJSON[T any](logger logx.Logger, w http.ResponseWriter, r *http.Request, dst *T) bool {
 	logger = mustLogger(logger)
 	r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
 	dec := json.NewDecoder(r.Body)
@@ -63,21 +61,21 @@ func decodeJSON[T any](logger *slog.Logger, w http.ResponseWriter, r *http.Reque
 		var mbe *http.MaxBytesError
 		// добавил логирование о превышении лимита тела
 		if errors.As(err, &mbe) {
-			logger.Warn("body too large", slog.String("req_id", reqID(r.Context())), slog.Int64("limit_bytes",
-				int64(mbe.Limit)), slog.Int64("content_length", r.ContentLength), slog.Any("err", err))
+			logger.Warn("body too large", logx.String("req_id", reqID(r.Context())), logx.Int64("limit_bytes",
+				int64(mbe.Limit)), logx.Int64("content_length", r.ContentLength), logx.Any("err", err))
 			writeError(logger, w, r, http.StatusRequestEntityTooLarge, "body too large")
 			return false
 		}
 
 		logger.Warn("json decode error",
-			slog.String("req_id", reqID(r.Context())),
-			slog.Any("err", err),
+			logx.String("req_id", reqID(r.Context())),
+			logx.Any("err", err),
 		)
 		writeError(logger, w, r, http.StatusBadRequest, "invalid json")
 		return false
 	}
 	if err := dec.Decode(new(struct{})); err != io.EOF {
-		logger.Warn("json trailing data", slog.String("req_id", reqID(r.Context())), slog.Any("err", err))
+		logger.Warn("json trailing data", logx.String("req_id", reqID(r.Context())), logx.Any("err", err))
 		writeError(logger, w, r, http.StatusBadRequest, "invalid json: trailing data")
 		return false
 	}

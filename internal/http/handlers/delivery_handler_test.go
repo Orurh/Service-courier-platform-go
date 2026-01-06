@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +15,7 @@ import (
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/logx"
 )
 
 type stubDeliveryUsecase struct {
@@ -24,9 +23,7 @@ type stubDeliveryUsecase struct {
 	unassignFn func(ctx context.Context, orderID string) (domain.UnassignResult, error)
 }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+func testLogger() logx.Logger { return logx.Nop() }
 
 func (s *stubDeliveryUsecase) Assign(ctx context.Context, orderID string) (domain.AssignResult, error) {
 	if s.assignFn == nil {

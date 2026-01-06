@@ -2,24 +2,21 @@ package handlers
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 
 	"course-go-avito-Orurh/internal/apperr"
+	"course-go-avito-Orurh/internal/logx"
 )
 
 // CourierHandler serves HTTP endpoints for courier resources.
 type CourierHandler struct {
 	usecase courierUsecase
-	logger  *slog.Logger
+	logger  logx.Logger
 }
 
 // NewCourierHandler wires a CourierUsecase into HTTP handlers.
-func NewCourierHandler(logger *slog.Logger, uc courierUsecase) *CourierHandler {
-	if logger == nil {
-		panic("courier_handler: logger is nil")
-	}
+func NewCourierHandler(logger logx.Logger, uc courierUsecase) *CourierHandler {
 	return &CourierHandler{usecase: uc, logger: logger}
 }
 

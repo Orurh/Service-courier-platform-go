@@ -2,23 +2,20 @@ package handlers
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"course-go-avito-Orurh/internal/apperr"
+	"course-go-avito-Orurh/internal/logx"
 )
 
 // DeliveryHandler handles HTTP requests for delivery resources.
 type DeliveryHandler struct {
 	usecase deliveryUsecase
-	logger  *slog.Logger
+	logger  logx.Logger
 }
 
 // NewDeliveryHandler creates a new DeliveryHandler.
-func NewDeliveryHandler(logger *slog.Logger, uc deliveryUsecase) *DeliveryHandler {
-	if logger == nil {
-		panic("delivery_handler: logger is nil")
-	}
+func NewDeliveryHandler(logger logx.Logger, uc deliveryUsecase) *DeliveryHandler {
 	return &DeliveryHandler{usecase: uc, logger: logger}
 }
 

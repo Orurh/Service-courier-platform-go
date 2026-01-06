@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"io"
-	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -15,10 +13,11 @@ import (
 
 	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/logx"
 )
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+func newTestLogger() logx.Logger {
+	return logx.Nop()
 }
 
 func setupTestContainer(t *testing.T) *dig.Container {
@@ -46,7 +45,7 @@ func setupTestContainer(t *testing.T) *dig.Container {
 		require.NoErrorf(t, err, "provide %s", p.name)
 	}
 
-	require.NoError(t, registerService(c))
+	require.NoError(t, registerDomainServices(c))
 	require.NoError(t, registerHTTP(c))
 
 	return c
@@ -131,7 +130,7 @@ func TestRegisterCore_ProvidesDependencies(t *testing.T) {
 
 	err = c.Invoke(func(
 		gotCtx context.Context,
-		logger *slog.Logger,
+		logger logx.Logger,
 		cfg *config.Config,
 		interval autoReleaseInterval,
 	) {
@@ -167,7 +166,7 @@ func TestRegisterDb_UsesDbConnectAndProvidesPool(t *testing.T) {
 
 	stubConnect := func(
 		gotCtx context.Context,
-		logger *slog.Logger,
+		logger logx.Logger,
 		dsn string,
 		retries int,
 		delay time.Duration,
@@ -194,7 +193,7 @@ func TestContainerBuilder_Build_Success(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		})
 
@@ -214,7 +213,7 @@ func TestContainerBuilder_Build_DBError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return nil, fmt.Errorf("db failed")
 		})
 
@@ -235,7 +234,7 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	ctx := context.Background()
 
 	builder := NewContainerBuilder().
-		WithDBConnect(func(context.Context, *slog.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
 			return &pgxpool.Pool{}, nil
 		}).
 		WithLogFatalf(func(format string, args ...interface{}) {

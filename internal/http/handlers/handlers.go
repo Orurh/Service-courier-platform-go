@@ -1,20 +1,18 @@
 package handlers
 
 import (
-	"log/slog"
 	"net/http"
+
+	"course-go-avito-Orurh/internal/logx"
 )
 
 // Handlers holds HTTP handlers dependencies (logger, etc.).
 type Handlers struct {
-	Logger *slog.Logger
+	Logger logx.Logger
 }
 
 // New creates a Handlers instance with the given logger (or a panic).
-func New(logger *slog.Logger) *Handlers {
-	if logger == nil {
-		panic("handlers: logger is nil")
-	}
+func New(logger logx.Logger) *Handlers {
 	return &Handlers{Logger: logger}
 }
 

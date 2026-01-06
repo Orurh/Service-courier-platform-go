@@ -1,10 +1,11 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
+
+	"course-go-avito-Orurh/internal/logx"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -35,11 +36,7 @@ func init() {
 }
 
 // Observability - middleware for prometheus
-func Observability(logger *slog.Logger) func(http.Handler) http.Handler {
-	if logger == nil {
-		panic("observability: logger is nil")
-	}
-
+func Observability(logger logx.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -53,10 +50,10 @@ func Observability(logger *slog.Logger) func(http.Handler) http.Handler {
 			httpRequestDuration.WithLabelValues(r.Method, path, status).Observe(tm.Seconds())
 
 			logger.Info("http request",
-				slog.String("method", r.Method),
-				slog.String("path", path),
-				slog.Int("status", ww.Status()),
-				slog.Duration("duration", tm),
+				logx.String("method", r.Method),
+				logx.String("path", path),
+				logx.Int("status", ww.Status()),
+				logx.Duration("duration", tm),
 			)
 		})
 	}

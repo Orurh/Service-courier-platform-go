@@ -3,10 +3,10 @@ package kafka
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"strings"
 	"time"
 
+	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/service/orders"
 
 	"github.com/IBM/sarama"
@@ -20,23 +20,22 @@ type Consumer struct {
 	group   sarama.ConsumerGroup
 	topic   string
 	handler HandleFunc
-	logger  *slog.Logger
+	logger  logx.Logger
 }
 
+var newConsumerGroup = sarama.NewConsumerGroup
+
 // NewConsumer creates a new Kafka consumer
-func NewConsumer(logger *slog.Logger, brokers []string, groupID, topic string, h HandleFunc) (*Consumer, error) {
+func NewConsumer(logger logx.Logger, brokers []string, groupID, topic string, h HandleFunc) (*Consumer, error) {
 	// не стратую если у кафки нет настроек
 	if len(brokers) == 0 || strings.TrimSpace(topic) == "" || strings.TrimSpace(groupID) == "" {
 		return nil, nil
-	}
-	if logger == nil {
-		panic("kafka: loger is nil")
 	}
 
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-	group, err := sarama.NewConsumerGroup(brokers, groupID, cfg)
+	group, err := newConsumerGroup(brokers, groupID, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +63,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 				if !ok {
 					return
 				}
-				c.logger.Error("kafka consumer group error", slog.Any("err", err))
+				c.logger.Error("kafka consumer group error", logx.Any("err", err))
 			}
 		}
 	}()
@@ -76,7 +75,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			c.logger.Error("kafka consume error", slog.Any("err", err))
+			c.logger.Error("kafka consume error", logx.Any("err", err))
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -119,7 +118,7 @@ func (h *groupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 
 			var dto EventDTO
 			if err := json.Unmarshal(msg.Value, &dto); err != nil {
-				h.c.logger.Warn("kafka bad json", slog.Any("err", err))
+				h.c.logger.Warn("kafka bad json", logx.Any("err", err))
 				sess.MarkMessage(msg, "")
 				continue
 			}
@@ -134,9 +133,9 @@ func (h *groupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 
 			if err := h.c.handler(sess.Context(), ev); err != nil {
 				h.c.logger.Error("kafka handle failed, skipping message",
-					slog.String("order_id", ev.OrderID),
-					slog.String("status", ev.Status),
-					slog.Any("err", err),
+					logx.String("order_id", ev.OrderID),
+					logx.String("status", ev.Status),
+					logx.Any("err", err),
 				)
 				sess.MarkMessage(msg, "")
 				continue

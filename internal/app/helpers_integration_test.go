@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"course-go-avito-Orurh/internal/logx"
 	"errors"
 	"io"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
+
+func testLogger(_ io.Writer) logx.Logger { return logx.Nop() }
 
 func withStubNewPool(t *testing.T, stub func(context.Context, string) (*pgxpool.Pool, error)) {
 	t.Helper()

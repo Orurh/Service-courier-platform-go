@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -13,15 +12,16 @@ import (
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/service/delivery"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+func testLogger(_ io.Writer) logx.Logger {
+	return logx.Nop()
 }
 
 func newTestDeliveryService(repo *MockdeliveryRepository, f delivery.TimeFactory) *delivery.Service {
-	return delivery.NewDeliveryService(repo, f, 3*time.Second, testLogger())
+	return delivery.NewDeliveryService(repo, f, 3*time.Second, testLogger(io.Discard))
 }
 
 func TestService_Assign_Success(t *testing.T) {
@@ -560,7 +560,7 @@ func TestNewDeliveryService_ZeroTimeoutUsesDefault_Behavior(t *testing.T) {
 	repo := NewMockdeliveryRepository(ctrl)
 	factory := NewMockTimeFactory(ctrl)
 
-	svc := delivery.NewDeliveryService(repo, factory, 0, testLogger())
+	svc := delivery.NewDeliveryService(repo, factory, 0, testLogger(io.Discard))
 
 	ctx := context.Background()
 	orderID := "order_1"

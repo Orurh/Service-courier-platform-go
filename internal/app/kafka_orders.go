@@ -32,17 +32,3 @@ func makeOrdersKafka(p *orders.Processor, gw *ordersgw.GRPCGateway) kafka.Handle
 		return p.Handle(ctx, event)
 	}
 }
-
-// func actionClass(s string) string {
-// 	str := strings.ToLower(strings.TrimSpace(s))
-// 	switch str {
-// 	case "created", "pending", "confirmed", "cooking", "delivering":
-// 		return "assign"
-// 	case "canceled", "deleted":
-// 		return "unassign"
-// 	case "completed":
-// 		return "complete"
-// 	default:
-// 		return "ignore"
-// 	}
-// }

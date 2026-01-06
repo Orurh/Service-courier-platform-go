@@ -2,20 +2,17 @@ package handlers_test
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/logx"
 
 	"github.com/stretchr/testify/require"
 )
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+func testLogger() logx.Logger { return logx.Nop() }
 
 func TestHandlers_Ping(t *testing.T) {
 	t.Parallel()
@@ -28,6 +25,7 @@ func TestHandlers_Ping(t *testing.T) {
 	h.Ping(rr, req)
 
 	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Header().Get("Content-Type"), "application/json")
 
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
@@ -59,16 +57,11 @@ func TestHandlers_NotFound(t *testing.T) {
 	h.NotFound(rr, req)
 
 	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Contains(t, rr.Header().Get("Content-Type"), "application/json")
 
-	var body map[string]string
+	var body struct {
+		Error string `json:"error"`
+	}
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&body))
-	require.Contains(t, body["error"], "route not found")
-}
-
-func TestHandlers_New_WithNilLogger(t *testing.T) {
-	t.Parallel()
-
-	require.PanicsWithValue(t, "handlers: logger is nil", func() {
-		_ = handlers.New(nil)
-	})
+	require.Contains(t, body.Error, "route not found")
 }
