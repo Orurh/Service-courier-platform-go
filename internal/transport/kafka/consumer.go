@@ -3,13 +3,14 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
+	"github.com/IBM/sarama"
+
 	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/service/orders"
-
-	"github.com/IBM/sarama"
 )
 
 // HandleFunc processes a single orders.Event from Kafka
@@ -21,6 +22,7 @@ type Consumer struct {
 	topic   string
 	handler HandleFunc
 	logger  logx.Logger
+	sleepFn func(context.Context, time.Duration) error
 }
 
 var newConsumerGroup = sarama.NewConsumerGroup
@@ -40,12 +42,14 @@ func NewConsumer(logger logx.Logger, brokers []string, groupID, topic string, h 
 		return nil, err
 	}
 
-	return &Consumer{
+	c := &Consumer{
 		group:   group,
 		topic:   topic,
 		handler: h,
 		logger:  logger,
-	}, nil
+	}
+	c.sleepFn = c.sleepOrDone
+	return c, nil
 }
 
 // Run starts the consumer
@@ -54,6 +58,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 		return nil
 	}
 	// я подумал логировать ошибки кафки в отдельной горутине...
+	c.runGroupErrorsLogger(ctx)
+
+	h := &groupHandler{c: c}
+
+	for {
+		if err := c.consumeOnce(ctx, h); err != nil {
+			return err
+		}
+	}
+}
+
+func (c *Consumer) runGroupErrorsLogger(ctx context.Context) {
 	go func() {
 		for {
 			select {
@@ -67,28 +83,43 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 		}
 	}()
+}
 
-	h := &groupHandler{c: c}
+func (c *Consumer) consumeOnce(ctx context.Context, h *groupHandler) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	err := c.group.Consume(ctx, []string{c.topic}, h)
+	if err == nil {
+		return c.sleepFn(ctx, 50*time.Millisecond)
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	c.logger.Error("kafka consume error", logx.Any("err", err))
+	return c.sleep(ctx, time.Second)
+}
 
-	for {
-		if err := c.group.Consume(ctx, []string{c.topic}, h); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			c.logger.Error("kafka consume error", logx.Any("err", err))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(time.Second):
-			}
-			continue
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+func (c *Consumer) sleep(ctx context.Context, d time.Duration) error {
+	if c.sleepFn == nil {
+		return c.sleepOrDone(ctx, d)
+	}
+	return c.sleepFn(ctx, d)
+}
+
+func (c *Consumer) sleepOrDone(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
 	}
 }
 
+// Close stops the consumer
 func (c *Consumer) Close() error {
 	if c == nil {
 		return nil
@@ -132,13 +163,22 @@ func (h *groupHandler) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sara
 			}
 
 			if err := h.c.handler(sess.Context(), ev); err != nil {
-				h.c.logger.Error("kafka handle failed, skipping message",
+				var perr PermanentError
+				if errors.As(err, &perr) {
+					h.c.logger.Warn("kafka handle failed permanently, skipping message",
+						logx.String("order_id", ev.OrderID),
+						logx.String("status", ev.Status),
+						logx.Any("err", err),
+					)
+					sess.MarkMessage(msg, "")
+					continue
+				}
+				h.c.logger.Error("kafka handle failed, will retry (not acked)",
 					logx.String("order_id", ev.OrderID),
 					logx.String("status", ev.Status),
 					logx.Any("err", err),
 				)
-				sess.MarkMessage(msg, "")
-				continue
+				return err
 			}
 			sess.MarkMessage(msg, "")
 		}

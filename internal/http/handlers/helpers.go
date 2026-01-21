@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"course-go-avito-Orurh/internal/logx"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"course-go-avito-Orurh/internal/logx"
 )
 
 func reqID(ctx context.Context) string {
@@ -23,6 +23,9 @@ func reqID(ctx context.Context) string {
 
 // логгер обязательный
 func mustLogger(logger logx.Logger) logx.Logger {
+	if logger == nil {
+		return logx.Nop()
+	}
 	return logger
 }
 

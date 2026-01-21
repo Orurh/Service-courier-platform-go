@@ -2,6 +2,7 @@ package logx
 
 type nopLogger struct{}
 
+// Nop returns a no-op Logger.
 func Nop() Logger { return nopLogger{} }
 
 func (nopLogger) Debug(string, ...Field) {}

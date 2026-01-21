@@ -49,26 +49,49 @@ func validateCreate(c *domain.Courier) error {
 	return nil
 }
 
+type updateRule func(*domain.PartialCourierUpdate) bool
+
+// validateUpdate вынес для линтера (ругался на ветвления)
+var courierUpdateRules = []updateRule{
+	ruleNoUpdateFields,
+	ruleBadName,
+	ruleBadPhone,
+	ruleBadStatus,
+	ruleBadTransportType,
+}
+
 func validateUpdate(u *domain.PartialCourierUpdate) error {
-	if u.ID <= 0 {
+	if u == nil || u.ID <= 0 {
 		return apperr.ErrInvalid
 	}
-	if u.Name == nil && u.Phone == nil && u.Status == nil && u.TransportType == nil {
-		return apperr.ErrInvalid
+
+	for _, bad := range courierUpdateRules {
+		if bad(u) {
+			return apperr.ErrInvalid
+		}
 	}
-	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
-		return apperr.ErrInvalid
-	}
-	if u.Phone != nil && !domain.ValidatePhone(*u.Phone) {
-		return apperr.ErrInvalid
-	}
-	if u.Status != nil && !domain.CourierStatus(*u.Status).Valid() {
-		return apperr.ErrInvalid
-	}
-	if u.TransportType != nil && !domain.CourierTransportType(*u.TransportType).Valid() {
-		return apperr.ErrInvalid
-	}
+
 	return nil
+}
+
+func ruleNoUpdateFields(u *domain.PartialCourierUpdate) bool {
+	return u.Name == nil && u.Phone == nil && u.Status == nil && u.TransportType == nil
+}
+
+func ruleBadName(u *domain.PartialCourierUpdate) bool {
+	return u.Name != nil && strings.TrimSpace(*u.Name) == ""
+}
+
+func ruleBadPhone(u *domain.PartialCourierUpdate) bool {
+	return u.Phone != nil && !domain.ValidatePhone(*u.Phone)
+}
+
+func ruleBadStatus(u *domain.PartialCourierUpdate) bool {
+	return u.Status != nil && !domain.CourierStatus(*u.Status).Valid()
+}
+
+func ruleBadTransportType(u *domain.PartialCourierUpdate) bool {
+	return u.TransportType != nil && !domain.CourierTransportType(*u.TransportType).Valid()
 }
 
 // Get retrieves a courier by its ID.

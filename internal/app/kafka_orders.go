@@ -9,10 +9,18 @@ import (
 	"course-go-avito-Orurh/internal/transport/kafka"
 )
 
-func makeOrdersKafka(p *orders.Processor, gw *ordersgw.GRPCGateway) kafka.HandleFunc {
+type ordersGateway interface {
+	GetByID(ctx context.Context, id string) (*ordersgw.Order, error)
+}
+
+type ordersHandler interface {
+	Handle(context.Context, orders.Event) error
+}
+
+func makeOrdersKafka(h ordersHandler, gw ordersGateway) kafka.HandleFunc {
 	return func(ctx context.Context, event orders.Event) error {
 		if gw == nil {
-			return p.Handle(ctx, event)
+			return h.Handle(ctx, event)
 		}
 
 		gwCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -29,6 +37,6 @@ func makeOrdersKafka(p *orders.Processor, gw *ordersgw.GRPCGateway) kafka.Handle
 
 		event.Status = ord.Status
 		event.CreatedAt = ord.CreatedAt
-		return p.Handle(ctx, event)
+		return h.Handle(ctx, event)
 	}
 }

@@ -7,48 +7,10 @@ package orders_test
 import (
 	context "context"
 	domain "course-go-avito-Orurh/internal/domain"
-	delivery "course-go-avito-Orurh/internal/service/delivery"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 )
-
-// MockTxRunner is a mock of TxRunner interface.
-type MockTxRunner struct {
-	ctrl     *gomock.Controller
-	recorder *MockTxRunnerMockRecorder
-}
-
-// MockTxRunnerMockRecorder is the mock recorder for MockTxRunner.
-type MockTxRunnerMockRecorder struct {
-	mock *MockTxRunner
-}
-
-// NewMockTxRunner creates a new mock instance.
-func NewMockTxRunner(ctrl *gomock.Controller) *MockTxRunner {
-	mock := &MockTxRunner{ctrl: ctrl}
-	mock.recorder = &MockTxRunnerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockTxRunner) EXPECT() *MockTxRunnerMockRecorder {
-	return m.recorder
-}
-
-// WithTx mocks base method.
-func (m *MockTxRunner) WithTx(ctx context.Context, fn func(delivery.TxRepository) error) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithTx", ctx, fn)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WithTx indicates an expected call of WithTx.
-func (mr *MockTxRunnerMockRecorder) WithTx(ctx, fn interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTx", reflect.TypeOf((*MockTxRunner)(nil).WithTx), ctx, fn)
-}
 
 // MockDeliveryPort is a mock of DeliveryPort interface.
 type MockDeliveryPort struct {

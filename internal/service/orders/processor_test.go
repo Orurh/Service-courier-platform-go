@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
 	"github.com/stretchr/testify/require"
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
-	"course-go-avito-Orurh/internal/service/delivery"
+	"course-go-avito-Orurh/internal/ports/deliverytx"
 	"course-go-avito-Orurh/internal/service/orders"
 )
 
@@ -47,6 +46,23 @@ func (s *stubTx) UpdateCourierStatus(ctx context.Context, id int64, status domai
 	return s.updateFn(ctx, id, status)
 }
 
+type noopRunner struct{}
+
+func (noopRunner) WithTx(ctx context.Context, fn func(tx deliverytx.Repository) error) error {
+	panic("WithTx must not be called in this test")
+}
+
+type stubRunner struct {
+	withTx func(ctx context.Context, fn func(tx deliverytx.Repository) error) error
+}
+
+func (s stubRunner) WithTx(ctx context.Context, fn func(tx deliverytx.Repository) error) error {
+	if s.withTx == nil {
+		return fn(nil)
+	}
+	return s.withTx(ctx, fn)
+}
+
 func TestProcessor_Handle_Created_AssignOK(t *testing.T) {
 	t.Parallel()
 
@@ -54,7 +70,7 @@ func TestProcessor_Handle_Created_AssignOK(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 
@@ -77,7 +93,7 @@ func TestProcessor_Handle_Created_ConflictIsIgnored(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 
@@ -96,7 +112,7 @@ func TestProcessor_Handle_Created_OtherErrorReturned(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 
@@ -116,7 +132,7 @@ func TestProcessor_Handle_Canceled_UnassignOK(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 
@@ -135,7 +151,7 @@ func TestProcessor_Handle_Canceled_NotFoundIsIgnored(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 
@@ -154,13 +170,8 @@ func TestProcessor_Handle_Completed_NoDelivery_NoUpdate(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
-
-	p := orders.NewProcessorWithDeps(d, r)
-
-	r.EXPECT().
-		WithTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, fn func(tx delivery.TxRepository) error) error {
+	r := stubRunner{
+		withTx: func(ctx context.Context, fn func(tx deliverytx.Repository) error) error {
 			tx := &stubTx{
 				getFn: func(ctx context.Context, orderID string) (*domain.Delivery, error) {
 					require.Equal(t, "order-3", orderID)
@@ -172,7 +183,10 @@ func TestProcessor_Handle_Completed_NoDelivery_NoUpdate(t *testing.T) {
 				},
 			}
 			return fn(tx)
-		})
+		},
+	}
+
+	p := orders.NewProcessorWithDeps(d, r)
 
 	err := p.Handle(context.Background(), orders.Event{OrderID: "order-3", Status: "completed"})
 	require.NoError(t, err)
@@ -185,13 +199,8 @@ func TestProcessor_Handle_Completed_UpdateCourierStatus(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
-
-	p := orders.NewProcessorWithDeps(d, r)
-
-	r.EXPECT().
-		WithTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(ctx context.Context, fn func(tx delivery.TxRepository) error) error {
+	r := stubRunner{
+		withTx: func(ctx context.Context, fn func(tx deliverytx.Repository) error) error {
 			tx := &stubTx{
 				getFn: func(ctx context.Context, orderID string) (*domain.Delivery, error) {
 					return &domain.Delivery{OrderID: orderID, CourierID: 42}, nil
@@ -203,7 +212,10 @@ func TestProcessor_Handle_Completed_UpdateCourierStatus(t *testing.T) {
 				},
 			}
 			return fn(tx)
-		})
+		},
+	}
+
+	p := orders.NewProcessorWithDeps(d, r)
 
 	err := p.Handle(context.Background(), orders.Event{OrderID: "order-4", Status: "completed"})
 	require.NoError(t, err)
@@ -216,7 +228,7 @@ func TestProcessor_Handle_UnknownStatus_NoOps(t *testing.T) {
 	defer ctrl.Finish()
 
 	d := NewMockDeliveryPort(ctrl)
-	r := NewMockTxRunner(ctrl)
+	r := noopRunner{}
 
 	p := orders.NewProcessorWithDeps(d, r)
 

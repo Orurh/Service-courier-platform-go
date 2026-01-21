@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"time"
 
-	"course-go-avito-Orurh/internal/logx"
-
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"course-go-avito-Orurh/internal/logx"
 )
 
 var (

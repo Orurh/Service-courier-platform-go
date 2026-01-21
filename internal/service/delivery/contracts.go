@@ -7,16 +7,11 @@ import (
 	"time"
 
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
-// TxRepository abstracts a delivery repository transaction.
-type TxRepository interface {
-	FindAvailableCourierForUpdate(ctx context.Context) (*domain.Courier, error)
-	UpdateCourierStatus(ctx context.Context, id int64, status domain.CourierStatus) error
-	InsertDelivery(ctx context.Context, d *domain.Delivery) error
-	GetByOrderID(ctx context.Context, orderID string) (*domain.Delivery, error)
-	DeleteByOrderID(ctx context.Context, orderID string) error
-}
+// TxRepository aliases deliverytx.Repository
+type TxRepository = deliverytx.Repository
 
 // deliveryRepository is an interface for the service layer.
 type deliveryRepository interface {

@@ -1,0 +1,120 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.8.0
+          args: --timeout=3m ./...
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: myuser
+          POSTGRES_PASSWORD: mypassword
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd "pg_isready -U myuser -d test_db"
+          --health-interval 1s
+          --health-timeout 3s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Export app env (match .env keys)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Зафиксируем ACT для последующих шагов (чтобы env.ACT в if: работал стабильно)
+          echo "ACT=${ACT:-false}" >> "$GITHUB_ENV"
+
+          # Этот job бежит на runner'е (не в job container), поэтому сервис доступен через localhost + ports.
+          DB_HOST="127.0.0.1"
+
+          echo "DB_HOST=${DB_HOST}" >> "$GITHUB_ENV"
+          echo "Using DB_HOST=${DB_HOST}"
+
+          # db (same keys as in your .env)
+          echo "POSTGRES_HOST=${DB_HOST}" >> "$GITHUB_ENV"
+
+
+          echo "POSTGRES_USER=myuser" >> "$GITHUB_ENV"
+          echo "POSTGRES_DB=test_db" >> "$GITHUB_ENV"
+          echo "POSTGRES_PORT=5432" >> "$GITHUB_ENV"
+
+          # password via file (как в docker-compose secrets)
+          mkdir -p secrets
+          printf '%s' 'mypassword' > secrets/postgres_password.txt
+          chmod 600 secrets/postgres_password.txt
+          echo "POSTGRES_PASSWORD_FILE=$GITHUB_WORKSPACE/secrets/postgres_password.txt" >> "$GITHUB_ENV"
+
+          # goose (driver оставим, а DBSTRING соберём позже из файла)
+          echo "GOOSE_DRIVER=postgres" >> "$GITHUB_ENV"
+
+      - name: Wait for DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            (echo >/dev/tcp/"$POSTGRES_HOST"/"$POSTGRES_PORT") >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "ERROR: DB port is not reachable" >&2
+          exit 1
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ./... -v -count=1
+
+      - name: Debug DB connectivity 
+        if: github.actor == 'nektos/act'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "DB_HOST=$DB_HOST"
+          echo "POSTGRES_HOST=$POSTGRES_HOST"
+          echo "Try connect:"
+          command -v pg_isready >/dev/null 2>&1 && pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" || true
+
+      - name: Apply migrations
+        shell: bash
+
+        run: |
+          set -euo pipefail
+          PW="$(cat "$POSTGRES_PASSWORD_FILE")"
+          export GOOSE_DBSTRING="postgres://$POSTGRES_USER:$PW@$POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
+          export GOOSE_DRIVER="${GOOSE_DRIVER:-postgres}"
+          go run github.com/pressly/goose/v3/cmd/goose@v3.26.0 -dir db/migrations up
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -tags=integration ./... -v -count=1

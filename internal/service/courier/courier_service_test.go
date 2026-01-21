@@ -261,6 +261,7 @@ func TestService_UpdatePartial_RepoError(t *testing.T) {
 	require.ErrorIs(t, err, wantErr)
 }
 
+//nolint:funlen
 func TestService_TimeoutConfiguration_Behavior(t *testing.T) {
 	t.Parallel()
 

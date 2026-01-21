@@ -6,13 +6,8 @@ import (
 	"context"
 
 	"course-go-avito-Orurh/internal/domain"
-	"course-go-avito-Orurh/internal/service/delivery"
+	// "course-go-avito-Orurh/internal/ports/deliverytx"
 )
-
-// TxRunner abstracts running a function within a delivery transaction
-type TxRunner interface {
-	WithTx(ctx context.Context, fn func(tx delivery.TxRepository) error) error
-}
 
 // DeliveryPort abstracts the subset of delivery service operations
 // needed by orders Processor when handling order events
