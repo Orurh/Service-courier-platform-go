@@ -160,35 +160,19 @@ func TestConsumer_ConsumeOnce_ErrorPath_UsesSleepOrDone(t *testing.T) {
 }
 
 func TestConsumer_RunGroupErrorsLogger_Logs(t *testing.T) {
+	t.Parallel()
 	rec := testlog.New()
 	fg := &fakeGroup{errCh: make(chan error, 1)}
 
 	c := &Consumer{
-		group:   fg,
-		topic:   "t",
-		logger:  rec.Logger(),
-		sleepFn: func(context.Context, time.Duration) error { return nil },
-		handler: func(context.Context, orders.Event) error {
-			return nil
-		},
+		group:  fg,
+		logger: rec.Logger(),
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.runGroupErrorsLogger(ctx)
 
 	fg.errCh <- errors.New("kafka internal error")
-	close(fg.errCh)
+	c.drainGroupErrors(context.Background())
 
-	deadline := time.Now().Add(200 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		if hasMsg(rec.Entries(), "kafka consumer group error") {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("expected log entry 'kafka consumer group error'")
-	cancel()
+	require.True(t, hasMsg(rec.Entries(), "kafka consumer group error"))
 }
 
 func TestConsumer_Close_NilReceiver_NoPanic(t *testing.T) {

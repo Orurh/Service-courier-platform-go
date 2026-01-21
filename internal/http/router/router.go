@@ -18,7 +18,6 @@ func New(base *handlers.Handlers, cour *handlers.CourierHandler, delivery *handl
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	// r.Use(middleware.Logger)
 	r.Use(obsmw.Observability(base.Logger))
 
 	r.Use(middleware.Recoverer)

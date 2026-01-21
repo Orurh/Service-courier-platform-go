@@ -30,11 +30,9 @@ func TestTokenBucketLimiter_BurstThenBlocksThenRefills(t *testing.T) {
 
 	clk := newFakeClock(time.Unix(0, 0))
 	l := NewTokenBucketLimiter(clk, Config{
-		Rate:  1, // 1 token/sec
-		Burst: 2, // capacity 2
+		Rate:  1,
+		Burst: 2,
 	})
-
-	// full burst at start => 2 allowed
 	if !l.Allow("ip1") {
 		t.Fatalf("expected allow #1")
 	}
@@ -45,7 +43,6 @@ func TestTokenBucketLimiter_BurstThenBlocksThenRefills(t *testing.T) {
 		t.Fatalf("expected block when bucket empty")
 	}
 
-	// +1 sec => +1 token => allow once
 	clk.Add(1 * time.Second)
 	if !l.Allow("ip1") {
 		t.Fatalf("expected allow after refill")
@@ -54,7 +51,6 @@ func TestTokenBucketLimiter_BurstThenBlocksThenRefills(t *testing.T) {
 		t.Fatalf("expected block (no tokens left)")
 	}
 
-	// +10 sec => should cap at burst=2
 	clk.Add(10 * time.Second)
 	if !l.Allow("ip1") {
 		t.Fatalf("expected allow #1 after long refill (capped by burst)")
@@ -73,7 +69,6 @@ func TestTokenBucketLimiter_IsPerKey(t *testing.T) {
 	clk := newFakeClock(time.Unix(0, 0))
 	l := NewTokenBucketLimiter(clk, Config{Rate: 1, Burst: 1})
 
-	// keyA consumes its only token
 	if !l.Allow("keyA") {
 		t.Fatalf("expected allow keyA #1")
 	}

@@ -7,21 +7,17 @@ import (
 
 // Config stores TokenBucketLimiter settings.
 type Config struct {
-	Rate  float64       // tokens per second
-	Burst int           // capacity (max tokens)
-	TTL   time.Duration // delete idle buckets (0 disables)
+	Rate  float64
+	Burst int
+	TTL   time.Duration
 }
 
 // TokenBucketLimiter per-key token bucket limiter.
 type TokenBucketLimiter struct {
-	cfg   Config
-	clock Clock
-
-	// map lock only for get/create + cleanup bookkeeping
-	mu      sync.RWMutex
-	buckets map[string]*bucket
-
-	// cleanup bookkeeping
+	cfg         Config
+	clock       Clock
+	mu          sync.RWMutex
+	buckets     map[string]*bucket
 	lastCleanup time.Time
 }
 

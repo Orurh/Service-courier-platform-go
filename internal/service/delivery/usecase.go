@@ -47,7 +47,6 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
-
 	var result domain.AssignResult
 
 	err = s.repo.WithTx(ctx, func(tx deliverytx.Repository) error {

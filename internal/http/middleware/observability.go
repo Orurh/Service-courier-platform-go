@@ -42,7 +42,7 @@ func Observability(logger logx.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor) // через прокси читаем ответ
 			next.ServeHTTP(ww, r)                              // пропускаем дальше
-			path := pathPattern(r)                             // что бы не взорвать прометеус
+			path := pathPattern(r)                             // что бы не взорвать прометеус))
 			tm := time.Since(start)
 			status := strconv.Itoa(ww.Status())
 

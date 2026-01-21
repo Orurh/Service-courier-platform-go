@@ -57,32 +57,33 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
-	// я подумал логировать ошибки кафки в отдельной горутине...
-	c.runGroupErrorsLogger(ctx)
 
 	h := &groupHandler{c: c}
 
 	for {
+		c.drainGroupErrors(ctx)
 		if err := c.consumeOnce(ctx, h); err != nil {
 			return err
 		}
+		c.drainGroupErrors(ctx)
 	}
 }
 
-func (c *Consumer) runGroupErrorsLogger(ctx context.Context) {
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
+func (c *Consumer) drainGroupErrors(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-c.group.Errors():
+			if !ok {
 				return
-			case err, ok := <-c.group.Errors():
-				if !ok {
-					return
-				}
-				c.logger.Error("kafka consumer group error", logx.Any("err", err))
 			}
+			c.logger.Error("kafka consumer group error", logx.Any("err", err))
+			continue
+		default:
+			return
 		}
-	}()
+	}
 }
 
 func (c *Consumer) consumeOnce(ctx context.Context, h *groupHandler) error {

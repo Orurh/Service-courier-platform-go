@@ -69,7 +69,6 @@ func decodeJSON[T any](logger logx.Logger, w http.ResponseWriter, r *http.Reques
 			writeError(logger, w, r, http.StatusRequestEntityTooLarge, "body too large")
 			return false
 		}
-
 		logger.Warn("json decode error",
 			logx.String("req_id", reqID(r.Context())),
 			logx.Any("err", err),

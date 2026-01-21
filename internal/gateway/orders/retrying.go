@@ -19,14 +19,14 @@ type counter interface {
 	Inc()
 }
 
-// RetryConfig описывает поведение RetryingGateway
+// RetryConfig is a configuration for RetryingGateway
 type RetryConfig struct {
 	MaxAttempts int
 	BaseDelay   time.Duration
 	MaxDelay    time.Duration
 }
 
-// RetryingGateway реализует поведение RetryingGateway
+// RetryingGateway is a gateway that retries on errors
 type RetryingGateway struct {
 	next    gateway
 	logger  logx.Logger
@@ -35,7 +35,7 @@ type RetryingGateway struct {
 	sleep   func(time.Duration)
 }
 
-// NewRetryingGateway конструктор который проверяет, что next не nil и возвращает RetryingGateway
+// NewRetryingGateway проверяет, что next не nil и возвращает RetryingGateway
 func NewRetryingGateway(next gateway, logger logx.Logger, retries counter, cfg RetryConfig) *RetryingGateway {
 	if next == nil {
 		return nil
@@ -79,7 +79,7 @@ func (g *RetryingGateway) GetByID(ctx context.Context, id string) (*Order, error
 	return nil, lastErr
 }
 
-// ListFrom реализует поведение RetryingGateway
+// ListFrom поведение RetryingGateway
 func (g *RetryingGateway) ListFrom(ctx context.Context, from time.Time) ([]Order, error) {
 	var lastErr error
 	for attempt := 1; attempt <= g.cfg.MaxAttempts; attempt++ {
@@ -110,7 +110,6 @@ func (g *RetryingGateway) ListFrom(ctx context.Context, from time.Time) ([]Order
 	return nil, lastErr
 }
 
-// isRetryable определяет, является ли ошибка повторяемой
 func isRetryable(err error) bool {
 	st, ok := status.FromError(err)
 	if !ok {
@@ -126,7 +125,6 @@ func isRetryable(err error) bool {
 	}
 }
 
-// backoff вычисляет задержку повтора
 func backoff(base, max time.Duration, attempt int) time.Duration {
 	d := base << (attempt - 1)
 	if d > max {

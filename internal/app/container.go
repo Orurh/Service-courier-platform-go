@@ -44,7 +44,6 @@ func MustBuildWorkerContainer(ctx context.Context) *dig.Container {
 // ContainerBuilder is a dig container builder.
 type ContainerBuilder struct {
 	dbConnect func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error)
-
 	logFatalf func(string, ...any)
 }
 

@@ -55,7 +55,7 @@ func (g *GRPCGateway) GetByID(ctx context.Context, id string) (*Order, error) {
 	return &ord, nil
 }
 
-// ListFrom список заказов через gRPC, не используется
+// ListFrom fetches orders from the orders service.
 func (g *GRPCGateway) ListFrom(ctx context.Context, from time.Time) ([]Order, error) {
 	req := &ordersproto.GetOrdersRequest{
 		From: timestamppb.New(from.UTC()),

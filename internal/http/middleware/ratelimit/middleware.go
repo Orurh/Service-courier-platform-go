@@ -29,7 +29,7 @@ func New(logger logx.Logger, counter prometheus.Counter, limiter Limiter) *Middl
 	}
 }
 
-// Handler returns chi-style middleware.
+// Handler декоратор для http.Handler
 func (m *Middleware) Handler() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
