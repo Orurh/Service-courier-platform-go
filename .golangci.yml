@@ -1,0 +1,64 @@
+version: "2"
+
+run:
+  timeout: 3m
+  tests: true
+  modules-download-mode: mod
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - unused
+
+    - errcheck
+    - ineffassign
+    - copyloopvar
+    - bodyclose
+    - nilerr
+    - durationcheck
+    - errorlint
+
+    - prealloc
+
+    - revive
+    - misspell
+    - whitespace
+    - nolintlint
+
+    - gocyclo
+    - cyclop
+    - gocognit
+    - nestif
+    - funlen
+
+
+    # - gofmt
+    # - goimports
+    - gocritic
+
+  exclusions:
+    rules:
+      - path: "_test\\.go$"
+        linters:
+          - depguard
+
+
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: exported
+          severity: warning
+        - name: indent-error-flow
+        - name: early-return
+        - name: unexported-return
+        - name: var-naming
+        - name: receiver-naming
+        - name: empty-lines
+
+    # остальное оставь как у тебя (gocyclo/cyclop/funlen и т.д.)
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -293,3 +293,18 @@ func TestProvideMetrics_AlreadyRegistered_WrongCollectorType_ReturnsError(t *tes
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "register rate_limit_exceeded_total")
 }
+
+func TestContainerBuilder_BuildWorker_Success(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	builder := NewContainerBuilder().
+		WithDBConnect(func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error) {
+			return &pgxpool.Pool{}, nil
+		})
+
+	c, err := builder.buildWorker(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, c)
+}

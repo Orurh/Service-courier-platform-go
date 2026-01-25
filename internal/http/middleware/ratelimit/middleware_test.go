@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/require"
 
 	"course-go-avito-Orurh/internal/logx"
 )
@@ -36,12 +37,8 @@ func TestMiddleware_Allows_RequestPassesToNext(t *testing.T) {
 
 	h.ServeHTTP(w, r)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-	if nextCalled != 1 {
-		t.Fatalf("expected next called once, got %d", nextCalled)
-	}
+	require.Equal(t, http.StatusOK, w.Code, "expected 200")
+	require.Equal(t, 1, nextCalled, "expected next called once")
 }
 
 func TestMiddleware_Blocks_Returns429AndIncrementsCounter(t *testing.T) {
@@ -67,23 +64,10 @@ func TestMiddleware_Blocks_Returns429AndIncrementsCounter(t *testing.T) {
 
 	h.ServeHTTP(w, r)
 
-	if nextCalled != 0 {
-		t.Fatalf("expected next not called, got %d", nextCalled)
-	}
-	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected 429, got %d", w.Code)
-	}
-	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("expected Content-Type=application/json, got %q", ct)
-	}
-	if ra := w.Header().Get("Retry-After"); ra != "1" {
-		t.Fatalf("expected Retry-After=1, got %q", ra)
-	}
-	if body := w.Body.String(); body != `{"error":"too many requests"}` {
-		t.Fatalf("unexpected body: %q", body)
-	}
-
-	if got := testutil.ToFloat64(counter); got != 1 {
-		t.Fatalf("expected counter=1, got %v", got)
-	}
+	require.Equal(t, 0, nextCalled, "expected next not called")
+	require.Equal(t, http.StatusTooManyRequests, w.Code, "expected 429")
+	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	require.Equal(t, "1", w.Header().Get("Retry-After"))
+	require.Equal(t, `{"error":"too many requests"}`, w.Body.String())
+	require.Equal(t, float64(1), testutil.ToFloat64(counter), "expected counter=1")
 }

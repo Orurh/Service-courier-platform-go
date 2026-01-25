@@ -24,6 +24,14 @@ var defaultDelivery = Delivery{
 	AutoReleaseInterval: 10 * time.Second,
 }
 
+var defaultRateLimit = rateLimit{
+	Enabled:    true,
+	Rate:       5,
+	Burst:      5,
+	TTL:        10 * time.Minute,
+	MaxBuckets: 0,
+}
+
 // DefaultPort returns the default port.
 func DefaultPort() int {
 	return defaultPort

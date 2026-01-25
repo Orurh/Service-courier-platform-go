@@ -25,6 +25,7 @@ type Config struct {
 	OrdersGateway OrdersGateway
 	Kafka         Kafka
 	Pprof         PprofConfig
+	RateLimit     rateLimit
 }
 
 // OrdersGateway stores orders gateway settings.
@@ -63,6 +64,14 @@ type PprofConfig struct {
 	Pass    string
 }
 
+type rateLimit struct {
+	Enabled    bool
+	Rate       float64
+	Burst      int
+	TTL        time.Duration
+	MaxBuckets int
+}
+
 // DSN returns database connection string.
 func (d DB) DSN() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -74,6 +83,55 @@ func envOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func envBool(key string, def bool) (bool, error) {
+	defStr := strconv.FormatBool(def)
+	raw := envOrDefault(key, defStr)
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s %q: %w", key, raw, err)
+	}
+	return v, nil
+}
+
+func envInt(key string, def int, validate func(int) bool) (int, error) {
+	defStr := strconv.Itoa(def)
+	raw := envOrDefault(key, defStr)
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s %q: %w", key, raw, err)
+	}
+	if validate != nil && !validate(v) {
+		return 0, fmt.Errorf("invalid %s %q", key, raw)
+	}
+	return v, nil
+}
+
+func envFloat64(key string, def float64, validate func(float64) bool) (float64, error) {
+	defStr := strconv.FormatFloat(def, 'f', -1, 64)
+	raw := envOrDefault(key, defStr)
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s %q: %w", key, raw, err)
+	}
+	if validate != nil && !validate(v) {
+		return 0, fmt.Errorf("invalid %s %q", key, raw)
+	}
+	return v, nil
+}
+
+func envDuration(key string, def time.Duration, validate func(time.Duration) bool) (time.Duration, error) {
+	defStr := def.String()
+	raw := envOrDefault(key, defStr)
+	v, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s %q: %w", key, raw, err)
+	}
+	if validate != nil && !validate(v) {
+		return 0, fmt.Errorf("invalid %s %q", key, raw)
+	}
+	return v, nil
 }
 
 func readSecretFromFile(envKey string) (string, bool, error) {
@@ -186,10 +244,9 @@ func parseOrdersGateway() (orderService string, cfg OrdersGateway, err error) {
 }
 
 func parsePprof() (PprofConfig, error) {
-	enabledStr := envOrDefault("PPROF_ENABLED", "false")
-	enabled, err := strconv.ParseBool(enabledStr)
+	enabled, err := envBool("PPROF_ENABLED", false)
 	if err != nil {
-		return PprofConfig{}, fmt.Errorf("invalid PPROF_ENABLED %q: %w", enabledStr, err)
+		return PprofConfig{}, err
 	}
 
 	addr := strings.TrimSpace(envOrDefault("PPROF_ADDR", "127.0.0.1:6060"))
@@ -202,6 +259,47 @@ func parsePprof() (PprofConfig, error) {
 		Addr:    addr,
 		User:    strings.TrimSpace(os.Getenv("PPROF_USER")),
 		Pass:    strings.TrimSpace(os.Getenv("PPROF_PASS")),
+	}, nil
+}
+
+func parseRateLimit() (rateLimit, error) {
+	enabled, err := envBool("RATE_LIMIT_ENABLED", defaultRateLimit.Enabled)
+	if err != nil {
+		return rateLimit{}, err
+	}
+
+	if !enabled {
+		cfg := defaultRateLimit
+		cfg.Enabled = false
+		return cfg, nil
+	}
+
+	rate, err := envFloat64("RATE_LIMIT_RATE", defaultRateLimit.Rate, func(v float64) bool { return v > 0 })
+	if err != nil {
+		return rateLimit{}, err
+	}
+
+	burst, err := envInt("RATE_LIMIT_BURST", defaultRateLimit.Burst, func(v int) bool { return v >= 1 })
+	if err != nil {
+		return rateLimit{}, err
+	}
+
+	ttl, err := envDuration("RATE_LIMIT_TTL", defaultRateLimit.TTL, func(v time.Duration) bool { return v >= 0 })
+	if err != nil {
+		return rateLimit{}, err
+	}
+
+	maxBuckets, err := envInt("RATE_LIMIT_MAX_BUCKETS", defaultRateLimit.MaxBuckets, func(v int) bool { return v >= 0 })
+	if err != nil {
+		return rateLimit{}, err
+	}
+
+	return rateLimit{
+		Enabled:    enabled,
+		Rate:       rate,
+		Burst:      burst,
+		TTL:        ttl,
+		MaxBuckets: maxBuckets,
 	}, nil
 }
 
@@ -239,7 +337,21 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	return &Config{Port: port, DB: db, Delivery: deliveryCfg, OrderService: orderHost, OrdersGateway: gwCfg, Kafka: kafkaCfg, Pprof: pprofCfg}, nil
+	rateLimitCfg, err := parseRateLimit()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{
+		Port:          port,
+		DB:            db,
+		Delivery:      deliveryCfg,
+		OrderService:  orderHost,
+		OrdersGateway: gwCfg,
+		Kafka:         kafkaCfg,
+		Pprof:         pprofCfg,
+		RateLimit:     rateLimitCfg,
+	}, nil
 }
 
 func loadKafka() (Kafka, error) {
