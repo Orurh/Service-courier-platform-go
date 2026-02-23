@@ -6,10 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"course-go-avito-Orurh/internal/http/handlers"
 	"course-go-avito-Orurh/internal/logx"
-
-	"github.com/stretchr/testify/require"
 )
 
 func testLogger() logx.Logger { return logx.Nop() }

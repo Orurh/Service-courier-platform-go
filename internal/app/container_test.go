@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 
@@ -24,6 +25,13 @@ func setupTestContainer(t *testing.T) *dig.Container {
 	t.Helper()
 
 	c := dig.New()
+
+	require.NoError(t, c.Provide(func() prometheus.Counter {
+		return prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "rate_limit_exceeded_total",
+			Help: "stub counter for unit tests",
+		})
+	}, dig.Name("rate_limit_exceeded_total")))
 
 	providers := []struct {
 		name     string
@@ -245,13 +253,43 @@ func TestContainerBuilder_MustBuild_LogsFatalOnError(t *testing.T) {
 	require.NotNil(t, c)
 }
 
-// func TestRegisterService_ProvidesOrderGateway(t *testing.T) {
-// 	t.Parallel()
+func TestProvideOrdersGateway_EmptyAddr_ReturnsNil(t *testing.T) {
+	t.Parallel()
 
-// 	c := setupTestContainer(t)
+	in := ordersGatewayIn{
+		Ctx:    context.Background(),
+		Cfg:    &config.Config{OrderService: "   "},
+		Logger: logx.Nop(),
+		Retries: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "gateway_retries_total_unit",
+			Help: "stub",
+		}),
+	}
 
-// 	err := c.Invoke(func(gw ordergateway.Gateway) {
-// 		require.NotNil(t, gw)
-// 	})
-// 	require.NoError(t, err)
-// }
+	gw, closer, err := provideOrdersGateway(in)
+	require.NoError(t, err)
+	require.Nil(t, gw)
+	require.Nil(t, closer)
+}
+
+func TestProvideMetrics_AlreadyRegistered_WrongCollectorType_ReturnsError(t *testing.T) {
+	oldReg := prometheus.DefaultRegisterer
+	oldGath := prometheus.DefaultGatherer
+	reg := prometheus.NewRegistry()
+	prometheus.DefaultRegisterer = reg
+	prometheus.DefaultGatherer = reg
+	t.Cleanup(func() {
+		prometheus.DefaultRegisterer = oldReg
+		prometheus.DefaultGatherer = oldGath
+	})
+
+	bad := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "rate_limit_exceeded_total",
+		Help: "wrong type",
+	})
+	require.NoError(t, reg.Register(bad))
+
+	_, err := provideMetrics()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "register rate_limit_exceeded_total")
+}

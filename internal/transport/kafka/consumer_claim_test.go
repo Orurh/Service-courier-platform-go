@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -97,10 +98,10 @@ func TestConsumeClaim_EmptyOrderID_Skips(t *testing.T) {
 	h := &groupHandler{c: c}
 
 	dto := EventDTO{
-		OrderID: "   ", 
+		OrderID: "   ",
 		Status:  "created",
 	}
-	b, _ := json.Marshal(dto)
+	b := mustMarshal(t, dto)
 
 	sess := &fakeSession{ctx: context.Background()}
 	msgCh := make(chan *sarama.ConsumerMessage, 1)
@@ -130,7 +131,35 @@ func TestConsumeClaim_HandlerError_SkipsButMarks(t *testing.T) {
 	h := &groupHandler{c: c}
 
 	dto := EventDTO{OrderID: "o1", Status: "created", CreatedAt: time.Now().UTC()}
-	b, _ := json.Marshal(dto)
+	b := mustMarshal(t, dto)
+
+	sess := &fakeSession{ctx: context.Background()}
+	msgCh := make(chan *sarama.ConsumerMessage, 1)
+	msgCh <- &sarama.ConsumerMessage{Value: b}
+	close(msgCh)
+
+	err := h.ConsumeClaim(sess, fakeClaim{ch: msgCh})
+	require.ErrorIs(t, err, sentinel)
+	require.Equal(t, 0, sess.MarkedCount())
+	require.True(t, hasMsg(rec.Entries(), "kafka handle failed, will retry (not acked)"))
+}
+
+func TestConsumeClaim_PermanentHandlerError_SkipsAndMarks(t *testing.T) {
+	t.Parallel()
+
+	rec := testlog.New()
+	sentinel := errors.New("permanent")
+
+	c := &Consumer{
+		logger: rec.Logger(),
+		handler: func(context.Context, orders.Event) error {
+			return fmt.Errorf("wrap: %w", Permanent(sentinel))
+		},
+	}
+	h := &groupHandler{c: c}
+
+	dto := EventDTO{OrderID: "o1", Status: "created", CreatedAt: time.Now().UTC()}
+	b := mustMarshal(t, dto)
 
 	sess := &fakeSession{ctx: context.Background()}
 	msgCh := make(chan *sarama.ConsumerMessage, 1)
@@ -140,7 +169,7 @@ func TestConsumeClaim_HandlerError_SkipsButMarks(t *testing.T) {
 	err := h.ConsumeClaim(sess, fakeClaim{ch: msgCh})
 	require.NoError(t, err)
 	require.Equal(t, 1, sess.MarkedCount())
-	require.True(t, hasMsg(rec.Entries(), "kafka handle failed, skipping message"))
+	require.True(t, hasMsg(rec.Entries(), "kafka handle failed permanently, skipping message"))
 }
 
 func TestConsumeClaim_Success_Marks(t *testing.T) {
@@ -160,7 +189,7 @@ func TestConsumeClaim_Success_Marks(t *testing.T) {
 	h := &groupHandler{c: c}
 
 	dto := EventDTO{OrderID: "o1", Status: "created"}
-	b, _ := json.Marshal(dto)
+	b := mustMarshal(t, dto)
 
 	sess := &fakeSession{ctx: context.Background()}
 	msgCh := make(chan *sarama.ConsumerMessage, 1)
@@ -180,4 +209,11 @@ func hasMsg(entries []testlog.Entry, msg string) bool {
 		}
 	}
 	return false
+}
+
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }

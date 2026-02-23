@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"course-go-avito-Orurh/internal/logx"
 	"errors"
 	"io"
 	"testing"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"course-go-avito-Orurh/internal/logx"
 )
 
 func testLogger(_ io.Writer) logx.Logger { return logx.Nop() }

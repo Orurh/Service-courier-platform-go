@@ -44,9 +44,9 @@ func mapProtoOrder(o *ordersproto.Order) Order {
 
 // GetByID fetches an order by ID from the orders service.
 func (g *GRPCGateway) GetByID(ctx context.Context, id string) (*Order, error) {
-	resp, err := g.client.GetOrderById(ctx, &ordersproto.GetOrderByIdRequest{Id: id})
+	resp, err := g.client.GetOrderByID(ctx, &ordersproto.GetOrderByIDRequest{Id: id})
 	if err != nil {
-		return nil, fmt.Errorf("order gateway: GetOrderById: %w", err)
+		return nil, fmt.Errorf("order gateway: GetOrderByID: %w", err)
 	}
 	if resp.Order == nil {
 		return nil, nil
@@ -55,7 +55,7 @@ func (g *GRPCGateway) GetByID(ctx context.Context, id string) (*Order, error) {
 	return &ord, nil
 }
 
-// ListFrom список заказов через gRPC, не используется
+// ListFrom fetches orders from the orders service.
 func (g *GRPCGateway) ListFrom(ctx context.Context, from time.Time) ([]Order, error) {
 	req := &ordersproto.GetOrdersRequest{
 		From: timestamppb.New(from.UTC()),

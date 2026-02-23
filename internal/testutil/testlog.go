@@ -6,23 +6,28 @@ import (
 	"course-go-avito-Orurh/internal/logx"
 )
 
+// Entry is a log entry
 type Entry struct {
 	Level  string
 	Msg    string
 	Fields []logx.Field
 }
 
+// Recorder records log entries
 type Recorder struct {
 	mu      sync.Mutex
 	entries []Entry
 }
 
+// New returns a new logger
 func New() *Recorder { return &Recorder{} }
 
+// Logger returns a bound logger
 func (r *Recorder) Logger() logx.Logger {
 	return bound{r: r}
 }
 
+// Entries returns a copy of the log entries
 func (r *Recorder) Entries() []Entry {
 	r.mu.Lock()
 	defer r.mu.Unlock()

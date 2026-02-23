@@ -22,6 +22,13 @@ type DeliveryRepositorySuite struct {
 	courierRepo  *repository.CourierRepo
 }
 
+func withTxDelivery(ctx context.Context, repo *repository.DeliveryRepo, fn func(tx delivery.TxRepository) error) error {
+	return repo.WithTx(ctx, func(tx delivery.TxRepository) error {
+
+		return fn(tx)
+	})
+}
+
 func (s *DeliveryRepositorySuite) SetupSuite() {
 	s.Require().NotNil(tcPool, "tcPool must be initialized in TestMain")
 
@@ -62,7 +69,7 @@ func (s *DeliveryRepositorySuite) TestInsertDeliveryAndGetByOrderID() {
 
 	var insertedID int64
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		d := &domain.Delivery{
 			CourierID:  courierID,
 			OrderID:    "order-1",
@@ -89,7 +96,7 @@ func (s *DeliveryRepositorySuite) TestInsertDeliveryAndGetByOrderID() {
 	s.Require().NoError(err)
 
 	var got2 *domain.Delivery
-	err = s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err = withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		var err error
 		got2, err = tx.GetByOrderID(ctx, "order-1")
 		return err
@@ -104,7 +111,7 @@ func (s *DeliveryRepositorySuite) TestDeleteByOrderID() {
 
 	courierID := s.createCourier("Artem", "+70000000000", domain.StatusAvailable)
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		d := &domain.Delivery{
 			CourierID:  courierID,
 			OrderID:    "order-2",
@@ -115,12 +122,12 @@ func (s *DeliveryRepositorySuite) TestDeleteByOrderID() {
 	})
 	s.Require().NoError(err)
 
-	err = s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err = withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		return tx.DeleteByOrderID(ctx, "order-2")
 	})
 	s.Require().NoError(err)
 
-	err = s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err = withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		got, err := tx.GetByOrderID(ctx, "order-2")
 		if err != nil {
 			return err
@@ -152,7 +159,7 @@ func (s *DeliveryRepositorySuite) TestFindAvailableCourierForUpdate_PicksLeastLo
 
 	var courier *domain.Courier
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		var err error
 		courier, err = tx.FindAvailableCourierForUpdate(ctx)
 		return err
@@ -202,7 +209,7 @@ func (s *DeliveryRepositorySuite) TestUpdateCourierStatus_Success() {
 
 	id := s.createCourier("Artem", "+70000000020", domain.StatusAvailable)
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		return tx.UpdateCourierStatus(ctx, id, domain.StatusBusy)
 	})
 	s.Require().NoError(err)
@@ -218,7 +225,7 @@ func (s *DeliveryRepositorySuite) TestUpdateCourierStatus_NotFound() {
 
 	const badID int64 = 999999
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		return tx.UpdateCourierStatus(ctx, badID, domain.StatusBusy)
 	})
 	s.Require().Error(err)
@@ -233,7 +240,7 @@ func (s *DeliveryRepositorySuite) TestFindAvailableCourierForUpdate_NoAvailableC
 
 	var courier *domain.Courier
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		var err error
 		courier, err = tx.FindAvailableCourierForUpdate(ctx)
 		return err
@@ -247,11 +254,102 @@ func (s *DeliveryRepositorySuite) TestDeleteByOrderID_NotFound() {
 
 	const orderID = "no-order"
 
-	err := s.deliveryRepo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
 		return tx.DeleteByOrderID(ctx, orderID)
 	})
 	s.Require().Error(err)
 	s.Contains(err.Error(), "not found")
+}
+
+func (s *DeliveryRepositorySuite) TestWithTx_BeginTx_ContextCanceled() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		return nil
+	})
+	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *DeliveryRepositorySuite) TestWithTx_Commit_ContextCanceled() {
+	ctx, cancel := context.WithCancel(context.Background())
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		cancel()
+		return nil
+	})
+	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *DeliveryRepositorySuite) TestInsertDelivery_FKViolation_CoversErrorBranch() {
+	ctx := context.Background()
+
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		d := &domain.Delivery{
+			CourierID:  999999,
+			OrderID:    "order-100",
+			AssignedAt: time.Now(),
+			Deadline:   time.Now().Add(10 * time.Minute),
+		}
+		return tx.InsertDelivery(ctx, d)
+	})
+	s.Require().Error(err)
+	s.Contains(err.Error(), "insert delivery")
+}
+
+func (s *DeliveryRepositorySuite) TestGetByOrderID_ContextCanceled_CoversErrorBranch() {
+	ctx := context.Background()
+
+	courierID := s.createCourier("ArtemX", "+70000000111", domain.StatusAvailable)
+	now := time.Now()
+
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		return tx.InsertDelivery(ctx, &domain.Delivery{
+			CourierID:  courierID,
+			OrderID:    "order-cancel-get",
+			AssignedAt: now,
+			Deadline:   now.Add(10 * time.Minute),
+		})
+	})
+	s.Require().NoError(err)
+	err = withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		_, err := tx.GetByOrderID(cctx, "order-cancel-get")
+		return err
+	})
+	s.Require().Error(err)
+	s.ErrorIs(err, context.Canceled)
+	s.Contains(err.Error(), "get delivery by order")
+}
+
+func (s *DeliveryRepositorySuite) TestDeleteByOrderID_ContextCanceled_CoversErrorBranch() {
+	ctx := context.Background()
+
+	courierID := s.createCourier("ArtemY", "+70000000112", domain.StatusAvailable)
+	now := time.Now()
+
+	err := withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		return tx.InsertDelivery(ctx, &domain.Delivery{
+			CourierID:  courierID,
+			OrderID:    "order-cancel-del",
+			AssignedAt: now,
+			Deadline:   now.Add(10 * time.Minute),
+		})
+	})
+	s.Require().NoError(err)
+
+	err = withTxDelivery(ctx, s.deliveryRepo, func(tx delivery.TxRepository) error {
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		return tx.DeleteByOrderID(cctx, "order-cancel-del")
+	})
+	s.Require().Error(err)
+	s.ErrorIs(err, context.Canceled)
+	s.Contains(err.Error(), "delete delivery by order")
 }
 
 func TestDeliveryRepositorySuite(t *testing.T) {

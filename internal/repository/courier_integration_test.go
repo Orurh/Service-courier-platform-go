@@ -172,6 +172,60 @@ func (s *CourierRepositorySuite) TestUpdatePartial_IsDublicate() {
 	s.ErrorIs(err, apperr.ErrConflict, "expected apperr.ErrConflict on duplicate phone")
 }
 
+func (s *CourierRepositorySuite) TestGet_ContextCanceled_ReturnsError() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got, err := s.repo.Get(ctx, 1)
+	s.Nil(got)
+	s.Error(err)
+}
+
+func (s *CourierRepositorySuite) TestCreate_ContextCanceled_ReturnsError() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.repo.Create(ctx, &domain.Courier{
+		Name:          "Artem5",
+		Phone:         "+70000000009",
+		Status:        domain.StatusAvailable,
+		TransportType: domain.TransportTypeFoot,
+	})
+	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *CourierRepositorySuite) TestList_ContextCanceled_ReturnsError() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	list, err := s.repo.List(ctx, nil, nil)
+	s.Nil(list)
+	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *CourierRepositorySuite) TestUpdatePartial_ContextCanceled_ReturnsError() {
+	id, err := s.repo.Create(context.Background(), &domain.Courier{
+		Name:          "Artem6",
+		Phone:         "+70000000010",
+		Status:        domain.StatusAvailable,
+		TransportType: domain.TransportTypeFoot,
+	})
+	s.Require().NoError(err)
+
+	newName := "Boom"
+	u := domain.PartialCourierUpdate{ID: id, Name: &newName}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ok, err := s.repo.UpdatePartial(ctx, u)
+	s.False(ok)
+	s.Error(err)
+	s.ErrorIs(err, context.Canceled)
+}
+
 func TestCourierRepositorySuite(t *testing.T) {
 	suite.Run(t, new(CourierRepositorySuite))
 }

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"course-go-avito-Orurh/internal/domain"
-	"course-go-avito-Orurh/internal/service/delivery"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
 // DeliveryRepo represents delivery repository.
@@ -23,17 +23,28 @@ func NewDeliveryRepo(db *pgxpool.Pool) *DeliveryRepo {
 }
 
 // WithTx opens a transaction and executes fn within it.
-func (r *DeliveryRepo) WithTx(ctx context.Context, fn func(tx delivery.TxRepository) error) error {
+func (r *DeliveryRepo) WithTx(ctx context.Context, fn func(tx deliverytx.Repository) error) (err error) {
 	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
-	wrapped := &txRepo{tx: tx}
+	// отменяем в случае паники
+	defer func() {
+		if p := recover(); p != nil {
+			err = tx.Rollback(ctx)
+			if err != nil {
+				panic(err)
+			}
+			panic(p)
+		}
+	}()
+
+	wrapped := &TxRepo{tx: tx}
 
 	if err := fn(wrapped); err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
-			return fmt.Errorf("rollback tx: %v (original error: %w)", rbErr, err)
+			return fmt.Errorf("rollback tx: %w (original error: %s)", rbErr, err.Error())
 		}
 		return err
 	}
@@ -45,12 +56,13 @@ func (r *DeliveryRepo) WithTx(ctx context.Context, fn func(tx delivery.TxReposit
 	return nil
 }
 
-type txRepo struct {
+// TxRepo represents transaction repository.
+type TxRepo struct {
 	tx pgx.Tx
 }
 
 // FindAvailableCourierForUpdate - find available courier for update.
-func (r *txRepo) FindAvailableCourierForUpdate(ctx context.Context) (*domain.Courier, error) {
+func (r *TxRepo) FindAvailableCourierForUpdate(ctx context.Context) (*domain.Courier, error) {
 	row := r.tx.QueryRow(ctx, `
         SELECT c.id, c.name, c.phone, c.status, c.transport_type
         FROM couriers c
@@ -73,7 +85,7 @@ func (r *txRepo) FindAvailableCourierForUpdate(ctx context.Context) (*domain.Cou
 }
 
 // UpdateCourierStatus - update courier status.
-func (r *txRepo) UpdateCourierStatus(ctx context.Context, id int64, status domain.CourierStatus) error {
+func (r *TxRepo) UpdateCourierStatus(ctx context.Context, id int64, status domain.CourierStatus) error {
 	ct, err := r.tx.Exec(ctx, `
         UPDATE couriers
         SET status = $2, updated_at = now()
@@ -89,7 +101,7 @@ func (r *txRepo) UpdateCourierStatus(ctx context.Context, id int64, status domai
 }
 
 // InsertDelivery - insert a new delivery.
-func (r *txRepo) InsertDelivery(ctx context.Context, d *domain.Delivery) error {
+func (r *TxRepo) InsertDelivery(ctx context.Context, d *domain.Delivery) error {
 	err := r.tx.QueryRow(ctx, `
         INSERT INTO delivery (courier_id, order_id, assigned_at, deadline)
         VALUES ($1, $2, $3, $4)
@@ -102,7 +114,7 @@ func (r *txRepo) InsertDelivery(ctx context.Context, d *domain.Delivery) error {
 }
 
 // GetByOrderID - get delivery by order ID.
-func (r *txRepo) GetByOrderID(ctx context.Context, orderID string) (*domain.Delivery, error) {
+func (r *TxRepo) GetByOrderID(ctx context.Context, orderID string) (*domain.Delivery, error) {
 	row := r.tx.QueryRow(ctx, `
         SELECT id, courier_id, order_id, assigned_at, deadline
         FROM delivery
@@ -120,7 +132,7 @@ func (r *txRepo) GetByOrderID(ctx context.Context, orderID string) (*domain.Deli
 }
 
 // DeleteByOrderID - delete delivery by order ID.
-func (r *txRepo) DeleteByOrderID(ctx context.Context, orderID string) error {
+func (r *TxRepo) DeleteByOrderID(ctx context.Context, orderID string) error {
 	ct, err := r.tx.Exec(ctx, `DELETE FROM delivery WHERE order_id = $1`, orderID)
 	if err != nil {
 		return fmt.Errorf("delete delivery by order %q: %w", orderID, err)

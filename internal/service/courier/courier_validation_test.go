@@ -13,6 +13,7 @@ import (
 	"course-go-avito-Orurh/internal/service/courier"
 )
 
+//nolint:funlen
 func TestService_Create_Validation(t *testing.T) {
 	t.Parallel()
 
@@ -109,6 +110,7 @@ func TestService_Create_Validation(t *testing.T) {
 
 func ptr[T any](v T) *T { return &v }
 
+//nolint:funlen
 func TestService_Update_Validation(t *testing.T) {
 	t.Parallel()
 

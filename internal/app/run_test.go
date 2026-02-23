@@ -66,6 +66,28 @@ func (fakeTimeFactory) Deadline(_ domain.CourierTransportType, assignedAt time.T
 	return assignedAt.Add(time.Hour), nil
 }
 
+// requireEventually - делаем проверку, пока она не будет пройдена или не истекнет таймаут, для защиты в CI от флаков
+// вдруг у нас планировщик не успеет
+func requireEventually(t *testing.T, timeout time.Duration, tick time.Duration, condition func() bool, msgAndArgs ...any) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+	for {
+		if condition() {
+			return
+		}
+		if time.Now().After(deadline) {
+			if len(msgAndArgs) > 0 {
+				t.Fatalf(msgAndArgs[0].(string), msgAndArgs[1:]...)
+			}
+			t.Fatalf("condition not satisfied within %s", timeout)
+		}
+		<-ticker.C
+	}
+}
+
 func TestStartAutoReleaseLoop_CallsReleaseExpired(t *testing.T) {
 	t.Parallel()
 
@@ -78,10 +100,14 @@ func TestStartAutoReleaseLoop_CallsReleaseExpired(t *testing.T) {
 
 	startAutoReleaseLoop(ctx, logger, svc, 10*time.Millisecond)
 
-	time.Sleep(50 * time.Millisecond)
+	requireEventually(
+		t,
+		500*time.Millisecond,
+		5*time.Millisecond,
+		func() bool { return repo.ReleaseCalls() > 0 },
+		"expected ReleaseExpired to be called at least once",
+	)
 	cancel()
-
-	require.Greater(t, repo.ReleaseCalls(), 0)
 }
 
 func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
@@ -97,46 +123,6 @@ func TestGracefulShutdown_DoesNotPanic(t *testing.T) {
 		gracefulShutdown(srv, logger, 100*time.Millisecond)
 	})
 }
-
-// func TestCloseResources_DoesNotPanic(t *testing.T) {
-// 	t.Parallel()
-
-// 	srv := &http.Server{
-// 		Addr:    "127.0.0.1:0",
-// 		Handler: http.NewServeMux(),
-// 	}
-// 	var pool *pgxpool.Pool
-// 	logger := logx.Nop()
-
-// 	require.NotPanics(t, func() {
-// 		closeResources(pool, srv, logger, nil, nil)
-// 	})
-// }
-
-// func TestAppRun_FullFlow_WithCancelledCtx(t *testing.T) {
-// 	t.Parallel()
-
-// 	ctx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-
-// 	srv := &http.Server{
-// 		Addr:    "127.0.0.1:0",
-// 		Handler: http.NewServeMux(),
-// 	}
-// 	var pool *pgxpool.Pool
-// 	logger := logx.Nop()
-
-// 	repo := &fakeDeliveryRepo{}
-// 	svc := delivery.NewDeliveryService(repo, fakeTimeFactory{}, time.Second, logger)
-
-// 	go func() {
-// 		time.Sleep(50 * time.Millisecond)
-// 		cancel()
-// 	}()
-
-// 	err := appRun(srv, ctx, pool, logger, svc, autoReleaseInterval(10*time.Millisecond), nil, nil)
-// 	require.ErrorIs(t, err, context.Canceled)
-// }
 
 func TestMustRun_ShutdownRequested(t *testing.T) {
 	t.Parallel()
@@ -173,7 +159,6 @@ func TestRunner_MustRun_StartupTimeout(t *testing.T) {
 
 	r.MustRun(container)
 	require.True(t, hasMsg(rec.Entries(), "startup aborted: startup timeout exceeded"))
-
 }
 
 func TestNewRunner_DefaultFields(t *testing.T) {

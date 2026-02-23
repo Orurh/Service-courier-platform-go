@@ -58,7 +58,9 @@ func run(container *dig.Container) error {
 type appDeps struct {
 	dig.In
 
-	Server              *http.Server
+	Server      *http.Server
+	PprofServer *http.Server `name:"pprof_server" optional:"true"`
+
 	AppCtx              context.Context
 	Pool                *pgxpool.Pool
 	Logger              logx.Logger
@@ -70,11 +72,16 @@ type appDeps struct {
 
 func appRun(d appDeps) error {
 	defer closeResources(d.Pool, d.Server, d.Logger, d.OrdersCloser)
+
 	startAutoReleaseLoop(d.AppCtx, d.Logger, d.DeliveryService, time.Duration(d.AutoReleaseInterval))
-	serverErrCh := startServer(d.Server, d.Logger)
-	err := waitForShutdown(d.AppCtx, d.Logger, serverErrCh)
+
+	serverErrCh := startServer("service-courier", d.Server, d.Logger)
+	pprofServerErrCh := startOptionalPprofServer(d.PprofServer, d.Logger)
+
+	err := waitForShutdownAny(d.AppCtx, d.Logger, serverErrCh, pprofServerErrCh)
 	d.Logger.Info("shut down service-courier")
 	gracefulShutdown(d.Server, d.Logger, shutdownTimeout)
+	gracefulShutdownOptional(d.PprofServer, d.Logger, shutdownTimeout)
 	return err
 }
 
@@ -95,10 +102,10 @@ func startAutoReleaseLoop(ctx context.Context, logger logx.Logger, deliveryServi
 	}()
 }
 
-func startServer(server *http.Server, logger logx.Logger) <-chan error {
+func startServer(name string, server *http.Server, logger logx.Logger) <-chan error {
 	ch := make(chan error, 1)
 	go func() {
-		logger.Info("service-courier listening", logx.String("addr", server.Addr))
+		logger.Info("http server listening", logx.String("name", name), logx.String("addr", server.Addr))
 		err := server.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			ch <- err
@@ -109,15 +116,48 @@ func startServer(server *http.Server, logger logx.Logger) <-chan error {
 	return ch
 }
 
+func startOptionalPprofServer(pprofSrv *http.Server, logger logx.Logger) <-chan error {
+	if pprofSrv == nil {
+		return nil
+	}
+	return startServer("pprof", pprofSrv, logger)
+}
+
+func waitForShutdownAny(
+	ctx context.Context,
+	logger logx.Logger,
+	serverErrCh <-chan error,
+	pprofServerErrCh <-chan error,
+) error {
+	if pprofServerErrCh == nil {
+		return waitForShutdown(ctx, logger, serverErrCh)
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-serverErrCh:
+		reportServerStop(logger, "server stopped", err)
+		return err
+	case err := <-pprofServerErrCh:
+		reportServerStop(logger, "pprof server stopped", err)
+		return waitForShutdown(ctx, logger, serverErrCh)
+	}
+}
+
 func waitForShutdown(ctx context.Context, logger logx.Logger, serverErrCh <-chan error) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-serverErrCh:
-		if err != nil {
-			logger.Error("server stopped", logx.Any("err", err))
-		}
+		reportServerStop(logger, "server stopped", err)
 		return err
+	}
+}
+
+func reportServerStop(logger logx.Logger, msg string, err error) {
+	if err != nil {
+		logger.Error(msg, logx.Any("err", err))
 	}
 }
 
@@ -127,6 +167,13 @@ func gracefulShutdown(srv *http.Server, logger logx.Logger, timeout time.Duratio
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown error", logx.Any("err", err))
 	}
+}
+
+func gracefulShutdownOptional(srv *http.Server, logger logx.Logger, timeout time.Duration) {
+	if srv == nil {
+		return
+	}
+	gracefulShutdown(srv, logger, timeout)
 }
 
 func closeResources(pool *pgxpool.Pool, server *http.Server, logger logx.Logger, ordersCloser ordersConnCloser) {

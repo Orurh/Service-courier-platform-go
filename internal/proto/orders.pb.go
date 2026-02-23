@@ -131,27 +131,27 @@ func (x *GetOrdersRequest) GetFrom() *timestamppb.Timestamp {
 }
 
 // Запрос на получение заказа по id
-type GetOrderByIdRequest struct {
+type GetOrderByIDRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetOrderByIdRequest) Reset() {
-	*x = GetOrderByIdRequest{}
+func (x *GetOrderByIDRequest) Reset() {
+	*x = GetOrderByIDRequest{}
 	mi := &file_orders_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetOrderByIdRequest) String() string {
+func (x *GetOrderByIDRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetOrderByIdRequest) ProtoMessage() {}
+func (*GetOrderByIDRequest) ProtoMessage() {}
 
-func (x *GetOrderByIdRequest) ProtoReflect() protoreflect.Message {
+func (x *GetOrderByIDRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_orders_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -163,12 +163,12 @@ func (x *GetOrderByIdRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetOrderByIdRequest.ProtoReflect.Descriptor instead.
-func (*GetOrderByIdRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetOrderByIDRequest.ProtoReflect.Descriptor instead.
+func (*GetOrderByIDRequest) Descriptor() ([]byte, []int) {
 	return file_orders_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetOrderByIdRequest) GetId() string {
+func (x *GetOrderByIDRequest) GetId() string {
 	if x != nil {
 		return x.Id
 	}
@@ -221,27 +221,27 @@ func (x *GetOrdersResponse) GetOrders() []*Order {
 }
 
 // Ответ на запрос получения заказа по id
-type GetOrderByIdResponse struct {
+type GetOrderByIDResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Order         *Order                 `protobuf:"bytes,1,opt,name=order,proto3" json:"order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetOrderByIdResponse) Reset() {
-	*x = GetOrderByIdResponse{}
+func (x *GetOrderByIDResponse) Reset() {
+	*x = GetOrderByIDResponse{}
 	mi := &file_orders_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetOrderByIdResponse) String() string {
+func (x *GetOrderByIDResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetOrderByIdResponse) ProtoMessage() {}
+func (*GetOrderByIDResponse) ProtoMessage() {}
 
-func (x *GetOrderByIdResponse) ProtoReflect() protoreflect.Message {
+func (x *GetOrderByIDResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_orders_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -253,12 +253,12 @@ func (x *GetOrderByIdResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetOrderByIdResponse.ProtoReflect.Descriptor instead.
-func (*GetOrderByIdResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetOrderByIDResponse.ProtoReflect.Descriptor instead.
+func (*GetOrderByIDResponse) Descriptor() ([]byte, []int) {
 	return file_orders_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetOrderByIdResponse) GetOrder() *Order {
+func (x *GetOrderByIDResponse) GetOrder() *Order {
 	if x != nil {
 		return x.Order
 	}
@@ -278,15 +278,15 @@ const file_orders_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"B\n" +
 	"\x10GetOrdersRequest\x12.\n" +
 	"\x04from\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\"%\n" +
-	"\x13GetOrderByIdRequest\x12\x0e\n" +
+	"\x13GetOrderByIDRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"=\n" +
 	"\x11GetOrdersResponse\x12(\n" +
 	"\x06orders\x18\x01 \x03(\v2\x10.orders.v1.OrderR\x06orders\">\n" +
-	"\x14GetOrderByIdResponse\x12&\n" +
+	"\x14GetOrderByIDResponse\x12&\n" +
 	"\x05order\x18\x01 \x01(\v2\x10.orders.v1.OrderR\x05order2\xa8\x01\n" +
 	"\rOrdersService\x12F\n" +
 	"\tGetOrders\x12\x1b.orders.v1.GetOrdersRequest\x1a\x1c.orders.v1.GetOrdersResponse\x12O\n" +
-	"\fGetOrderById\x12\x1e.orders.v1.GetOrderByIdRequest\x1a\x1f.orders.v1.GetOrderByIdResponseB/Z-course-go-avito-Orurh/internal/proto;orderspbb\x06proto3"
+	"\fGetOrderByID\x12\x1e.orders.v1.GetOrderByIDRequest\x1a\x1f.orders.v1.GetOrderByIDResponseB/Z-course-go-avito-Orurh/internal/proto;orderspbb\x06proto3"
 
 var (
 	file_orders_proto_rawDescOnce sync.Once
@@ -300,27 +300,24 @@ func file_orders_proto_rawDescGZIP() []byte {
 	return file_orders_proto_rawDescData
 }
 
-var (
-	file_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-	file_orders_proto_goTypes  = []any{
-		(*Order)(nil),                 // 0: orders.v1.Order
-		(*GetOrdersRequest)(nil),      // 1: orders.v1.GetOrdersRequest
-		(*GetOrderByIdRequest)(nil),   // 2: orders.v1.GetOrderByIdRequest
-		(*GetOrdersResponse)(nil),     // 3: orders.v1.GetOrdersResponse
-		(*GetOrderByIdResponse)(nil),  // 4: orders.v1.GetOrderByIdResponse
-		(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	}
-)
-
+var file_orders_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_orders_proto_goTypes = []any{
+	(*Order)(nil),                 // 0: orders.v1.Order
+	(*GetOrdersRequest)(nil),      // 1: orders.v1.GetOrdersRequest
+	(*GetOrderByIDRequest)(nil),   // 2: orders.v1.GetOrderByIDRequest
+	(*GetOrdersResponse)(nil),     // 3: orders.v1.GetOrdersResponse
+	(*GetOrderByIDResponse)(nil),  // 4: orders.v1.GetOrderByIDResponse
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+}
 var file_orders_proto_depIdxs = []int32{
 	5, // 0: orders.v1.Order.created_at:type_name -> google.protobuf.Timestamp
 	5, // 1: orders.v1.GetOrdersRequest.from:type_name -> google.protobuf.Timestamp
 	0, // 2: orders.v1.GetOrdersResponse.orders:type_name -> orders.v1.Order
-	0, // 3: orders.v1.GetOrderByIdResponse.order:type_name -> orders.v1.Order
+	0, // 3: orders.v1.GetOrderByIDResponse.order:type_name -> orders.v1.Order
 	1, // 4: orders.v1.OrdersService.GetOrders:input_type -> orders.v1.GetOrdersRequest
-	2, // 5: orders.v1.OrdersService.GetOrderById:input_type -> orders.v1.GetOrderByIdRequest
+	2, // 5: orders.v1.OrdersService.GetOrderByID:input_type -> orders.v1.GetOrderByIDRequest
 	3, // 6: orders.v1.OrdersService.GetOrders:output_type -> orders.v1.GetOrdersResponse
-	4, // 7: orders.v1.OrdersService.GetOrderById:output_type -> orders.v1.GetOrderByIdResponse
+	4, // 7: orders.v1.OrdersService.GetOrderByID:output_type -> orders.v1.GetOrderByIDResponse
 	6, // [6:8] is the sub-list for method output_type
 	4, // [4:6] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name

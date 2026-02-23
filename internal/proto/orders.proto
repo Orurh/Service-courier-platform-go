@@ -7,7 +7,6 @@ option go_package = "course-go-avito-Orurh/internal/proto;orderspb";
 import "google/protobuf/timestamp.proto";
 
 // Минимальная модель заказа, которую используем в service-courier:
-// номера полей и типы ДОЛЖНЫ совпасть с сервером.
 message Order {
   string id = 1;
   string status = 9;
@@ -20,7 +19,7 @@ message GetOrdersRequest {
 }
 
 // Запрос на получение заказа по id
-message GetOrderByIdRequest {
+message GetOrderByIDRequest {
   string id = 1;
 }
 
@@ -30,12 +29,12 @@ message GetOrdersResponse {
 }
 
 // Ответ на запрос получения заказа по id
-message GetOrderByIdResponse {
+message GetOrderByIDResponse {
   Order order = 1;
 }
 
 // Интерфейс службы, возвращающей заказы
 service OrdersService {
   rpc GetOrders(GetOrdersRequest) returns (GetOrdersResponse);
-  rpc GetOrderById(GetOrderByIdRequest) returns (GetOrderByIdResponse);
+  rpc GetOrderByID(GetOrderByIDRequest) returns (GetOrderByIDResponse);
 }

@@ -6,69 +6,98 @@ import (
 	"testing"
 	"time"
 
-	"course-go-avito-Orurh/internal/config"
-
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
+
+	"course-go-avito-Orurh/internal/config"
 )
 
 func resetFlags(t *testing.T) {
 	t.Helper()
+
+	oldArgs := os.Args
+	os.Args = []string{oldArgs[0]}
+	t.Cleanup(func() { os.Args = oldArgs })
+
 	old := pflag.CommandLine
 	pflag.CommandLine = pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
-	t.Cleanup(func() {
-		pflag.CommandLine = old
-	})
+	t.Cleanup(func() { pflag.CommandLine = old })
+}
+
+func setEnvEmpty(t *testing.T, keys ...string) {
+	t.Helper()
+	for _, k := range keys {
+		t.Setenv(k, "")
+	}
+}
+
+func setEnvMap(t *testing.T, kv map[string]string) {
+	t.Helper()
+	for k, v := range kv {
+		t.Setenv(k, v)
+	}
 }
 
 func TestLoad_Defaults(t *testing.T) {
 	resetFlags(t)
 
-	t.Setenv("PORT", "")
-	t.Setenv("POSTGRES_HOST", "")
-	t.Setenv("POSTGRES_PORT", "")
-	t.Setenv("POSTGRES_USER", "")
-	t.Setenv("POSTGRES_PASSWORD", "")
-	t.Setenv("POSTGRES_DB", "")
-	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "")
+	setEnvEmpty(t,
+		"PORT",
+		"POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+		"POSTGRES_PASSWORD_FILE",
+		"DELIVERY_AUTO_RELEASE_INTERVAL",
+		"ORDER_SERVICE_HOST",
+		"ORDER_GATEWAY_MAX_ATTEMPTS", "ORDER_GATEWAY_BASE_DELAY", "ORDER_GATEWAY_MAX_DELAY",
+	)
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	require.Equal(t, 8080, cfg.Port)
+	require.Equal(t, config.DefaultPort(), cfg.Port)
 
-	require.Equal(t, "127.0.0.1", cfg.DB.Host)
-	require.Equal(t, "5432", cfg.DB.Port)
-	require.Equal(t, "myuser", cfg.DB.User)
-	require.Equal(t, "mypassword", cfg.DB.Pass)
-	require.Equal(t, "test_db", cfg.DB.Name)
+	require.Equal(t, config.DefaultDB(), cfg.DB)
 
-	require.Equal(t, 10*time.Second, cfg.Delivery.AutoReleaseInterval)
+	require.Equal(t, config.DefaultDelivery(), cfg.Delivery)
+	require.Equal(t, config.DefaultOrderServiceHost(), cfg.OrderService)
+	require.Equal(t, config.DefaultOrdersGateway(), cfg.OrdersGateway)
 }
 
 func TestLoad_EnvOverrides(t *testing.T) {
 	resetFlags(t)
 
-	t.Setenv("PORT", "9090")
-	t.Setenv("POSTGRES_HOST", "db")
-	t.Setenv("POSTGRES_PORT", "15432")
-	t.Setenv("POSTGRES_USER", "u")
-	t.Setenv("POSTGRES_PASSWORD", "p")
-	t.Setenv("POSTGRES_DB", "service")
-	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "30s")
+	setEnvMap(t, map[string]string{
+		"PORT":                           "9090",
+		"POSTGRES_HOST":                  "db",
+		"POSTGRES_PORT":                  "15432",
+		"POSTGRES_USER":                  "u",
+		"POSTGRES_PASSWORD":              "p",
+		"POSTGRES_PASSWORD_FILE":         "",
+		"POSTGRES_DB":                    "service",
+		"DELIVERY_AUTO_RELEASE_INTERVAL": "30s",
+		"ORDER_SERVICE_HOST":             "service-order:50051",
+		"ORDER_GATEWAY_MAX_ATTEMPTS":     "5",
+		"ORDER_GATEWAY_BASE_DELAY":       "150ms",
+		"ORDER_GATEWAY_MAX_DELAY":        "2s",
+	})
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
 	require.Equal(t, 9090, cfg.Port)
-	require.Equal(t, "db", cfg.DB.Host)
-	require.Equal(t, "15432", cfg.DB.Port)
-	require.Equal(t, "u", cfg.DB.User)
-	require.Equal(t, "p", cfg.DB.Pass)
-	require.Equal(t, "service", cfg.DB.Name)
-	require.Equal(t, 30*time.Second, cfg.Delivery.AutoReleaseInterval)
+	require.Equal(t, config.DB{
+		Host: "db", Port: "15432", User: "u", Pass: "p", Name: "service",
+	}, cfg.DB)
+	require.Equal(t, config.Delivery{
+		AutoReleaseInterval: 30 * time.Second,
+	}, cfg.Delivery)
+	require.Equal(t, "service-order:50051", cfg.OrderService)
+	require.Equal(t, config.OrdersGateway{
+		MaxAttempts: 5,
+		BaseDelay:   150 * time.Millisecond,
+		MaxDelay:    2 * time.Second,
+	}, cfg.OrdersGateway)
 }
 
 func TestLoad_InvalidPort(t *testing.T) {
@@ -88,6 +117,7 @@ func TestLoad_InvalidPostgresPort(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("POSTGRES_PORT", "not-a-number")
 	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "10s")
+	t.Setenv("POSTGRES_PASSWORD_FILE", "")
 
 	cfg, err := config.Load()
 	require.Error(t, err)
@@ -100,6 +130,53 @@ func TestLoad_InvalidReleaseInterval(t *testing.T) {
 	t.Setenv("PORT", "8080")
 	t.Setenv("POSTGRES_PORT", "5432")
 	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "bad-interval")
+	t.Setenv("POSTGRES_PASSWORD_FILE", "")
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+}
+
+func TestLoad_InvalidOrderGatewayMaxAttempts(t *testing.T) {
+	resetFlags(t)
+	setEnvEmpty(t,
+		"PORT",
+		"POSTGRES_PASSWORD_FILE",
+		"DELIVERY_AUTO_RELEASE_INTERVAL",
+		"ORDER_GATEWAY_MAX_ATTEMPTS", "ORDER_GATEWAY_BASE_DELAY", "ORDER_GATEWAY_MAX_DELAY",
+	)
+	t.Setenv("ORDER_GATEWAY_MAX_ATTEMPTS", "0")
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+}
+
+func TestLoad_InvalidOrderGatewayBaseDelay(t *testing.T) {
+	resetFlags(t)
+	setEnvEmpty(t,
+		"PORT",
+		"POSTGRES_PASSWORD_FILE",
+		"DELIVERY_AUTO_RELEASE_INTERVAL",
+		"ORDER_GATEWAY_MAX_ATTEMPTS", "ORDER_GATEWAY_BASE_DELAY", "ORDER_GATEWAY_MAX_DELAY",
+	)
+	t.Setenv("ORDER_GATEWAY_BASE_DELAY", "bad")
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+}
+
+func TestLoad_InvalidOrderGatewayMaxDelayLessThanBase(t *testing.T) {
+	resetFlags(t)
+	setEnvEmpty(t,
+		"PORT",
+		"POSTGRES_PASSWORD_FILE",
+		"DELIVERY_AUTO_RELEASE_INTERVAL",
+		"ORDER_GATEWAY_MAX_ATTEMPTS", "ORDER_GATEWAY_BASE_DELAY", "ORDER_GATEWAY_MAX_DELAY",
+	)
+	t.Setenv("ORDER_GATEWAY_BASE_DELAY", "200ms")
+	t.Setenv("ORDER_GATEWAY_MAX_DELAY", "100ms")
 
 	cfg, err := config.Load()
 	require.Error(t, err)
@@ -127,4 +204,39 @@ func TestLoad_FlagsParseError(t *testing.T) {
 	require.Error(t, err)
 	require.Nil(t, cfg)
 	require.Contains(t, err.Error(), "parse flags")
+}
+
+func TestLoad_PostgresPasswordFile_ReadError_ReturnsError(t *testing.T) {
+	resetFlags(t)
+
+	t.Setenv("PORT", "")
+	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "")
+
+	secretDir := t.TempDir() + "/secret-dir"
+	require.NoError(t, os.Mkdir(secretDir, 0o755))
+
+	setEnvMap(t, map[string]string{
+		"POSTGRES_PASSWORD":      "from-env",
+		"POSTGRES_PASSWORD_FILE": secretDir,
+	})
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+	require.Contains(t, err.Error(), "read POSTGRES_PASSWORD_FILE")
+}
+
+func TestLoad_InvalidKafkaBrokers_EmptyAfterTrim(t *testing.T) {
+	resetFlags(t)
+
+	t.Setenv("PORT", "")
+	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "")
+	t.Setenv("POSTGRES_PASSWORD_FILE", "")
+
+	t.Setenv("KAFKA_BROKERS", " , ,   , ")
+
+	cfg, err := config.Load()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+	require.Contains(t, err.Error(), "invalid KAFKA_BROKERS")
 }

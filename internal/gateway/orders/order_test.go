@@ -7,24 +7,24 @@ import (
 	"testing"
 	"time"
 
-	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
-	ordersproto "course-go-avito-Orurh/internal/proto"
-
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
+	ordersproto "course-go-avito-Orurh/internal/proto"
 )
 
 type stubOrdersClient struct {
-	getOrderByIdFn func(ctx context.Context, in *ordersproto.GetOrderByIdRequest, opts ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error)
+	getOrderByIDFn func(ctx context.Context, in *ordersproto.GetOrderByIDRequest, opts ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error)
 	getOrdersFn    func(ctx context.Context, in *ordersproto.GetOrdersRequest, opts ...grpc.CallOption) (*ordersproto.GetOrdersResponse, error)
 }
 
-func (s stubOrdersClient) GetOrderById(ctx context.Context, in *ordersproto.GetOrderByIdRequest, opts ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error) {
-	if s.getOrderByIdFn == nil {
-		panic("GetOrderById not expected")
+func (s stubOrdersClient) GetOrderByID(ctx context.Context, in *ordersproto.GetOrderByIDRequest, opts ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error) {
+	if s.getOrderByIDFn == nil {
+		panic("GetOrderByID not expected")
 	}
-	return s.getOrderByIdFn(ctx, in, opts...)
+	return s.getOrderByIDFn(ctx, in, opts...)
 }
 
 func (s stubOrdersClient) GetOrders(ctx context.Context, in *ordersproto.GetOrdersRequest, opts ...grpc.CallOption) (*ordersproto.GetOrdersResponse, error) {
@@ -43,7 +43,7 @@ func TestGRPCGateway_GetByID_ErrorWrapped(t *testing.T) {
 	wantErr := errors.New("boom")
 
 	client := stubOrdersClient{
-		getOrderByIdFn: func(ctx context.Context, in *ordersproto.GetOrderByIdRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error) {
+		getOrderByIDFn: func(ctx context.Context, in *ordersproto.GetOrderByIDRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error) {
 			require.Equal(t, "order-1", in.GetId())
 			return nil, wantErr
 		},
@@ -54,13 +54,13 @@ func TestGRPCGateway_GetByID_ErrorWrapped(t *testing.T) {
 	ord, err := gw.GetByID(context.Background(), "order-1")
 	require.Nil(t, ord)
 	require.ErrorIs(t, err, wantErr)
-	require.True(t, strings.Contains(err.Error(), "order gateway: GetOrderById"))
+	require.True(t, strings.Contains(err.Error(), "order gateway: GetOrderByID"))
 }
 
 func TestGRPCGateway_GetByID_NoOrder_ReturnsNil(t *testing.T) {
 	client := stubOrdersClient{
-		getOrderByIdFn: func(ctx context.Context, in *ordersproto.GetOrderByIdRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error) {
-			return &ordersproto.GetOrderByIdResponse{Order: nil}, nil
+		getOrderByIDFn: func(ctx context.Context, in *ordersproto.GetOrderByIDRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error) {
+			return &ordersproto.GetOrderByIDResponse{Order: nil}, nil
 		},
 	}
 	gw := ordersgw.NewGRPCGateway(client)
@@ -74,8 +74,8 @@ func TestGRPCGateway_GetByID_MapsFields(t *testing.T) {
 	wantTime := time.Date(2025, 1, 2, 3, 4, 5, 123, time.UTC)
 
 	client := stubOrdersClient{
-		getOrderByIdFn: func(ctx context.Context, in *ordersproto.GetOrderByIdRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error) {
-			return &ordersproto.GetOrderByIdResponse{
+		getOrderByIDFn: func(ctx context.Context, in *ordersproto.GetOrderByIDRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error) {
+			return &ordersproto.GetOrderByIDResponse{
 				Order: &ordersproto.Order{
 					Id:        "order-1",
 					Status:    "CREATED",
@@ -97,8 +97,8 @@ func TestGRPCGateway_GetByID_MapsFields(t *testing.T) {
 
 func TestGRPCGateway_GetByID_CreatedAtNil_MapsZeroTime(t *testing.T) {
 	client := stubOrdersClient{
-		getOrderByIdFn: func(ctx context.Context, in *ordersproto.GetOrderByIdRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIdResponse, error) {
-			return &ordersproto.GetOrderByIdResponse{
+		getOrderByIDFn: func(ctx context.Context, in *ordersproto.GetOrderByIDRequest, _ ...grpc.CallOption) (*ordersproto.GetOrderByIDResponse, error) {
+			return &ordersproto.GetOrderByIDResponse{
 				Order: &ordersproto.Order{
 					Id:        "order-1",
 					Status:    "CREATED",
@@ -130,7 +130,7 @@ func TestGRPCGateway_ListFrom_SendsUTCFrom_AndMaps(t *testing.T) {
 
 			return &ordersproto.GetOrdersResponse{
 				Orders: []*ordersproto.Order{
-					nil, // должен быть пропущен
+					nil,
 					{Id: "o1", Status: "A", CreatedAt: timestamppb.New(o1Time)},
 					{Id: "o2", Status: "B", CreatedAt: nil},
 				},

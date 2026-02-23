@@ -8,6 +8,7 @@ import (
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
 	"course-go-avito-Orurh/internal/logx"
+	"course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
 // Service - service for assigning deliveries to couriers.
@@ -16,6 +17,7 @@ type Service struct {
 	factory          TimeFactory
 	operationTimeout time.Duration
 	logger           logx.Logger
+	now              func() time.Time
 }
 
 func (s *Service) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -32,6 +34,7 @@ func NewDeliveryService(r deliveryRepository, f TimeFactory, timeout time.Durati
 		factory:          f,
 		operationTimeout: timeout,
 		logger:           logger,
+		now:              func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -44,10 +47,9 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
-
 	var result domain.AssignResult
 
-	err = s.repo.WithTx(ctx, func(tx TxRepository) error {
+	err = s.repo.WithTx(ctx, func(tx deliverytx.Repository) error {
 		courier, err := tx.FindAvailableCourierForUpdate(ctx)
 		if err != nil {
 			return err
@@ -56,7 +58,7 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 			return apperr.ErrConflict
 		}
 
-		now := time.Now().UTC()
+		now := s.now()
 		deadline, err := s.factory.Deadline(domain.CourierTransportType(courier.TransportType), now)
 		if err != nil {
 			return err
@@ -112,7 +114,7 @@ func (s *Service) Unassign(ctx context.Context, orderID string) (domain.Unassign
 
 	var result domain.UnassignResult
 
-	err = s.repo.WithTx(ctx, func(tx TxRepository) error {
+	err = s.repo.WithTx(ctx, func(tx deliverytx.Repository) error {
 		d, err := tx.GetByOrderID(ctx, orderID)
 		if err != nil {
 			return err
@@ -157,7 +159,7 @@ func (s *Service) ReleaseExpired(ctx context.Context) error {
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
-	now := time.Now().UTC()
+	now := s.now()
 	_, err := s.repo.ReleaseCouriers(ctx, now)
 	return err
 }

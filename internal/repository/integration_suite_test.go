@@ -23,6 +23,24 @@ var tcDSN string
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
+	connStr, pool, cleanup, err := setupPostgres(ctx)
+	if err != nil {
+		log.Fatalf("failed to setup  test container: %v", err)
+	}
+
+	tcPool = pool
+	tcDSN = connStr
+	if err := createTables(ctx, tcPool); err != nil {
+		cleanup()
+		log.Fatalf("failed to create test tables: %v", err)
+	}
+
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
+
+func setupPostgres(ctx context.Context) (string, *pgxpool.Pool, func(), error) {
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
 		postgres.WithDatabase("test_db"),
@@ -35,7 +53,7 @@ func TestMain(m *testing.M) {
 		),
 	)
 	if err != nil {
-		log.Fatalf("failed to start postgres testcontainer: %v", err)
+		return "", nil, func() {}, fmt.Errorf("start postgres testcontainer: %w", err)
 	}
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
@@ -43,7 +61,7 @@ func TestMain(m *testing.M) {
 		if termErr := pgContainer.Terminate(ctx); termErr != nil {
 			log.Printf("failed to terminate container after conn string error: %v", termErr)
 		}
-		log.Fatalf("failed to get connection string from container: %v", err)
+		return "", nil, func() {}, fmt.Errorf("get connection string: %w", err)
 	}
 
 	pool, err := pgxpool.New(ctx, connStr)
@@ -51,35 +69,25 @@ func TestMain(m *testing.M) {
 		if termErr := pgContainer.Terminate(ctx); termErr != nil {
 			log.Printf("failed to terminate container after pool create error: %v", termErr)
 		}
-		log.Fatalf("failed to create pgx pool: %v", err)
+		return "", nil, func() {}, fmt.Errorf("create pgx pool: %w", err)
 	}
+
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
 		if termErr := pgContainer.Terminate(ctx); termErr != nil {
 			log.Printf("failed to terminate container after ping error: %v", termErr)
 		}
-		log.Fatalf("failed to ping postgres in testcontainer: %v", err)
+		return "", nil, func() {}, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	tcPool = pool
-	tcDSN = connStr
-
-	if err := createTables(ctx, tcPool); err != nil {
+	cleanup := func() {
 		pool.Close()
 		if termErr := pgContainer.Terminate(ctx); termErr != nil {
-			log.Printf("failed to terminate container after createTables error: %v", termErr)
+			log.Printf("failed to terminate postgres container: %v", termErr)
 		}
-		log.Fatalf("failed to create test tables: %v", err)
 	}
 
-	code := m.Run()
-
-	pool.Close()
-	if err := pgContainer.Terminate(ctx); err != nil {
-		log.Printf("failed to terminate postgres container: %v", err)
-	}
-
-	os.Exit(code)
+	return connStr, pool, cleanup, nil
 }
 
 func createTables(ctx context.Context, pool *pgxpool.Pool) error {

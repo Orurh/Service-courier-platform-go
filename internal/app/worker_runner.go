@@ -12,14 +12,17 @@ import (
 	"course-go-avito-Orurh/internal/transport/kafka"
 )
 
+// WorkerRunner runs the HTTP server
 type WorkerRunner struct {
 	runFn func(*dig.Container) error
 }
 
+// NewWorkerRunner returns a new WorkerRunner
 func NewWorkerRunner() *WorkerRunner {
 	return &WorkerRunner{runFn: runWorker}
 }
 
+// MustRun starts the HTTP server using the provided DI container
 func (r *WorkerRunner) MustRun(container *dig.Container) {
 	err := r.runFn(container)
 	if err == nil || errors.Is(err, context.Canceled) {

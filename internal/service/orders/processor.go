@@ -6,37 +6,22 @@ import (
 
 	"course-go-avito-Orurh/internal/apperr"
 	"course-go-avito-Orurh/internal/domain"
-	"course-go-avito-Orurh/internal/repository"
-	"course-go-avito-Orurh/internal/service/delivery"
+	"course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
 // Processor processes orders events
 type Processor struct {
 	delivery DeliveryPort
-	repo     TxRunner
+	repo     deliverytx.Runner
 	factory  *actionFactory
 }
 
 // NewProcessorWithDeps creates a Processor from interfaces (handy for tests).
-func NewProcessorWithDeps(deliverySvc DeliveryPort, repo TxRunner) *Processor {
+func NewProcessorWithDeps(deliverySvc DeliveryPort, repo deliverytx.Runner) *Processor {
 	return newProcessor(deliverySvc, repo)
 }
 
-type repoAdapter struct {
-	r *repository.DeliveryRepo
-}
-
-// WithTx opens a transaction and executes fn within it.
-func (a repoAdapter) WithTx(ctx context.Context, fn func(tx delivery.TxRepository) error) error {
-	return a.r.WithTx(ctx, fn)
-}
-
-// NewProcessor creates a new orders.Processor
-func NewProcessor(deliverySvc *delivery.Service, repo *repository.DeliveryRepo) *Processor {
-	return newProcessor(deliverySvc, repoAdapter{r: repo})
-}
-
-func newProcessor(deliverySvc DeliveryPort, repo TxRunner) *Processor {
+func newProcessor(deliverySvc DeliveryPort, repo deliverytx.Runner) *Processor {
 	p := &Processor{
 		delivery: deliverySvc,
 		repo:     repo,
@@ -74,7 +59,7 @@ func (p *Processor) onCanceled(ctx context.Context, e Event) error {
 }
 
 func (p *Processor) onCompleted(ctx context.Context, e Event) error {
-	return p.repo.WithTx(ctx, func(tx delivery.TxRepository) error {
+	return p.repo.WithTx(ctx, func(tx deliverytx.Repository) error {
 		d, err := tx.GetByOrderID(ctx, e.OrderID)
 		if err != nil {
 			return err

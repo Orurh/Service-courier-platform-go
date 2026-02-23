@@ -1,8 +1,11 @@
 .env
 .env.*
-!.env.example
+*.env
+**/*.env
+
 .git
 .github
 .idea
 .vscode
-**/*.md
+**/*_test.go
+**/coverage*.out

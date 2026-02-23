@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/dig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -15,8 +17,10 @@ import (
 	"course-go-avito-Orurh/internal/config"
 	ordersgw "course-go-avito-Orurh/internal/gateway/orders"
 	"course-go-avito-Orurh/internal/http/handlers"
+	"course-go-avito-Orurh/internal/http/pprofserver"
 	"course-go-avito-Orurh/internal/http/router"
 	"course-go-avito-Orurh/internal/logx"
+	"course-go-avito-Orurh/internal/metrics"
 	ordersproto "course-go-avito-Orurh/internal/proto"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/courier"
@@ -25,6 +29,14 @@ import (
 	"course-go-avito-Orurh/internal/transport/kafka"
 )
 
+type metricsOut struct {
+	dig.Out
+
+	RateLimitExceededTotal prometheus.Counter `name:"rate_limit_exceeded_total"`
+	GatewayRetriesTotal    prometheus.Counter `name:"gateway_retries_total"`
+}
+
+// MustBuildWorkerContainer builds and returns a new dig container
 func MustBuildWorkerContainer(ctx context.Context) *dig.Container {
 	return NewContainerBuilder().MustBuildWorker(ctx)
 }
@@ -32,7 +44,6 @@ func MustBuildWorkerContainer(ctx context.Context) *dig.Container {
 // ContainerBuilder is a dig container builder.
 type ContainerBuilder struct {
 	dbConnect func(context.Context, logx.Logger, string, int, time.Duration) (*pgxpool.Pool, error)
-
 	logFatalf func(string, ...any)
 }
 
@@ -90,6 +101,7 @@ func (b *ContainerBuilder) build(ctx context.Context) (*dig.Container, error) {
 	return container, nil
 }
 
+// MustBuildWorker builds and returns a new dig container
 func (b *ContainerBuilder) MustBuildWorker(ctx context.Context) *dig.Container {
 	container, err := b.buildWorker(ctx)
 	if err != nil {
@@ -135,6 +147,7 @@ func registerCore(container *dig.Container, ctx context.Context) error {
 		func() context.Context { return ctx },
 		NewLogger,
 		config.Load,
+		provideMetrics,
 		func(cfg *config.Config) autoReleaseInterval {
 			return autoReleaseInterval(cfg.Delivery.AutoReleaseInterval)
 		},
@@ -175,7 +188,10 @@ func registerDomainServices(container *dig.Container) error {
 func registerWorker(container *dig.Container) error {
 	return provideAll(container,
 		provideOrdersGateway,
-		orders.NewProcessor,
+		func(deliverySvc orders.DeliveryPort, repo *repository.DeliveryRepo) *orders.Processor {
+			return orders.NewProcessorWithDeps(deliverySvc, repo)
+		},
+
 		makeOrdersKafka,
 
 		func(cfg *config.Config, h kafka.HandleFunc, logger logx.Logger) (*kafka.Consumer, error) {
@@ -191,9 +207,16 @@ func registerWorker(container *dig.Container) error {
 	)
 }
 
+type serversOut struct {
+	dig.Out
+
+	Server *http.Server
+	Pprof  *http.Server `name:"pprof_server"`
+}
+
 func registerHTTP(container *dig.Container) error {
-	serverProvider := func(cfg *config.Config, mux http.Handler) *http.Server {
-		return &http.Server{
+	serverProvider := func(cfg *config.Config, mux http.Handler) serversOut {
+		main := &http.Server{
 			Addr:              fmt.Sprintf(":%d", cfg.Port),
 			Handler:           mux,
 			ReadHeaderTimeout: 5 * time.Second,
@@ -201,13 +224,30 @@ func registerHTTP(container *dig.Container) error {
 			WriteTimeout:      15 * time.Second,
 			IdleTimeout:       60 * time.Second,
 		}
+
+		var pprofS *http.Server
+
+		if cfg.Pprof.Enabled {
+			pprofS = &http.Server{
+
+				Addr:              cfg.Pprof.Addr,
+				Handler:           pprofserver.Handler(pprofserver.Config{User: cfg.Pprof.User, Pass: cfg.Pprof.Pass}),
+				ReadHeaderTimeout: 5 * time.Second,
+				IdleTimeout:       60 * time.Second,
+			}
+		}
+		return serversOut{Server: main, Pprof: pprofS}
 	}
+
 	return provideAll(container,
 		handlers.New,
 		handlers.NewCourierUsecase,
 		handlers.NewCourierHandler,
 		handlers.NewDeliveryUsecase,
 		handlers.NewDeliveryHandler,
+		newRateLimitClock,
+		newRateLimiter,
+		newRateLimitMiddleware,
 		router.New,
 		serverProvider,
 	)
@@ -215,8 +255,17 @@ func registerHTTP(container *dig.Container) error {
 
 type ordersConnCloser func() error
 
-func provideOrdersGateway(ctx context.Context, cfg *config.Config) (*ordersgw.GRPCGateway, ordersConnCloser, error) {
-	addr := strings.TrimSpace(cfg.OrderService)
+type ordersGatewayIn struct {
+	dig.In
+	Ctx     context.Context
+	Cfg     *config.Config
+	Logger  logx.Logger
+	Retries prometheus.Counter `name:"gateway_retries_total"`
+}
+
+func provideOrdersGateway(in ordersGatewayIn) (ordersGateway, ordersConnCloser, error) {
+	addr := strings.TrimSpace(in.Cfg.OrderService)
+
 	if addr == "" {
 		return nil, nil, nil
 	}
@@ -225,6 +274,50 @@ func provideOrdersGateway(ctx context.Context, cfg *config.Config) (*ordersgw.GR
 		return nil, nil, fmt.Errorf("provideOrdersGateway grpc: %w", err)
 	}
 	client := ordersproto.NewOrdersServiceClient(conn)
-	gw := ordersgw.NewGRPCGateway(client)
+	base := ordersgw.NewGRPCGateway(client)
+
+	gw := ordersgw.NewRetryingGateway(
+		base,
+		in.Logger,
+		in.Retries,
+		ordersgw.RetryConfig{
+			MaxAttempts: in.Cfg.OrdersGateway.MaxAttempts,
+			BaseDelay:   in.Cfg.OrdersGateway.BaseDelay,
+			MaxDelay:    in.Cfg.OrdersGateway.MaxDelay,
+		},
+	)
 	return gw, func() error { return conn.Close() }, nil
+}
+
+func provideMetrics() (metricsOut, error) {
+	rl := metrics.NewRateLimitExceededTotal()
+	if err := prometheus.Register(rl); err != nil {
+		var are prometheus.AlreadyRegisteredError
+		if !errors.As(err, &are) {
+			return metricsOut{}, fmt.Errorf("register rate_limit_exceeded_total: %w", err)
+		}
+		existing, ok := are.ExistingCollector.(prometheus.Counter)
+		if !ok {
+			return metricsOut{}, fmt.Errorf("register rate_limit_exceeded_total: %w", err)
+		}
+		rl = existing
+	}
+
+	gr := metrics.NewGatewayRetriesTotal()
+	if err := prometheus.Register(gr); err != nil {
+		var are prometheus.AlreadyRegisteredError
+		if !errors.As(err, &are) {
+			return metricsOut{}, fmt.Errorf("register gateway_retries_total: %w", err)
+		}
+		existing, ok := are.ExistingCollector.(prometheus.Counter)
+		if !ok {
+			return metricsOut{}, fmt.Errorf("register gateway_retries_total: %w", err)
+		}
+		gr = existing
+	}
+
+	return metricsOut{
+		RateLimitExceededTotal: rl,
+		GatewayRetriesTotal:    gr,
+	}, nil
 }
