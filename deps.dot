@@ -88,8 +88,19 @@ digraph G {
     app [label="app", fillcolor="#FFFBEB"];
   }
 
+  // ---------- Entrypoints / binaries ----------
+  subgraph cluster_cmd {
+    label = "Entrypoints (cmd)";
+    color = "#D1FAE5";
+    style = "rounded";
+
+    cmd_api    [label="cmd/service-courier", fillcolor="#ECFDF5"];
+    cmd_worker [label="cmd/worker", fillcolor="#ECFDF5"];
+  }
+
   // ---------- Optional layout hints ----------
-  { rank=min; app; }
+  { rank=min; cmd_api; cmd_worker; }
+  { rank=same; app; }
   { rank=same; apperr; domain; logx; metrics; config; proto; ports_tx; }
   { rank=same; http_router; kafka_transport; gw_orders; repo; }
 
@@ -130,6 +141,8 @@ digraph G {
 
   kafka_transport -> logx;
   kafka_transport -> svc_orders;
+  cmd_api -> app    [color="#0F766E", penwidth=1.2];
+  cmd_worker -> app [color="#0F766E", penwidth=1.2];
 
   // Composition root wiring (shown as dashed edges)
   app -> config          [style=dashed, color="#94A3B8", constraint=false];
