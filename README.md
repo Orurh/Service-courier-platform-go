@@ -1,8 +1,6 @@
 # Service Courier Platform (Go)
 
-## Кратко
-
-Backend-сервис для управления курьерами и доставками, разделённый на два процесса:
+## Backend-сервис для управления курьерами и доставками, разделённый на два процесса:
 
 - **`service-courier`** — HTTP API
 - **`service-courier-worker`** — фоновый обработчик событий заказов (Kafka consumer)
