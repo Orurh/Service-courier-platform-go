@@ -25,14 +25,17 @@ type updateCourierRequest struct {
 	TransportType *domain.CourierTransportType `json:"transport_type,omitempty" example:"bike"`
 }
 
-type idResponse struct {
+// IDResponse contains created/returned entity identifier.
+type IDResponse struct {
 	ID int64 `json:"id" example:"1"`
 }
 
-type statusResponse struct {
+// StatusResponse contains operation status.
+type StatusResponse struct {
 	Status string `json:"status" example:"ok"`
 }
 
-type errorResponse struct {
+// ErrorResponse contains error message for failed requests.
+type ErrorResponse struct {
 	Error string `json:"error" example:"invalid input"`
 }

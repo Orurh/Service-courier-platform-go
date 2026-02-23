@@ -12,7 +12,7 @@ import (
 
 	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/logx"
-	"course-go-avito-Orurh/internal/metrics"
+	"course-go-avito-Orurh/internal/prometrics"
 )
 
 type httpServersIn struct {
@@ -111,8 +111,8 @@ func TestProvideMetrics_AlreadyRegistered_ReturnsExistingCounters(t *testing.T) 
 	})
 
 	// те же метрики юзаем
-	existingRL := metrics.NewRateLimitExceededTotal()
-	existingGR := metrics.NewGatewayRetriesTotal()
+	existingRL := prometrics.NewRateLimitExceededTotal()
+	existingGR := prometrics.NewGatewayRetriesTotal()
 
 	require.NoError(t, reg.Register(existingRL))
 	require.NoError(t, reg.Register(existingGR))

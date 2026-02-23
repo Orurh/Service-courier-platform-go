@@ -20,6 +20,24 @@ definitions:
     - TransportTypeFoot
     - TransportTypeScooter
     - TransportTypeCar
+  handlers.ErrorResponse:
+    properties:
+      error:
+        example: invalid input
+        type: string
+    type: object
+  handlers.IDResponse:
+    properties:
+      id:
+        example: 1
+        type: integer
+    type: object
+  handlers.StatusResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
   handlers.assignDeliveryRequest:
     properties:
       order_id:
@@ -62,18 +80,6 @@ definitions:
         - $ref: '#/definitions/domain.CourierTransportType'
         example: bike
     type: object
-  handlers.errorResponse:
-    properties:
-      error:
-        example: invalid input
-        type: string
-    type: object
-  handlers.idResponse:
-    properties:
-      id:
-        example: 1
-        type: integer
-    type: object
   handlers.unassignDeliveryRequest:
     properties:
       order_id:
@@ -89,7 +95,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Создаёт нового курьера
+      description: Частично обновляет данные курьера по телу запроса
       parameters:
       - description: Create courier payload
         in: body
@@ -100,27 +106,27 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
-          headers:
-            Location:
-              description: URL созданного ресурса
-              type: string
+        "200":
+          description: status ok
           schema:
-            $ref: '#/definitions/handlers.idResponse'
+            $ref: '#/definitions/handlers.StatusResponse'
         "400":
-          description: Bad Request
+          description: invalid input
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
         "409":
-          description: Conflict
+          description: phone already exists
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
         "500":
-          description: Internal Server Error
+          description: internal error
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
-      summary: Создать курьера
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Обновить курьера
       tags:
       - couriers
   /courier/{id}:
@@ -140,17 +146,17 @@ paths:
           schema:
             $ref: '#/definitions/handlers.courierDTO'
         "400":
-          description: Bad Request
+          description: invalid id
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
         "404":
-          description: Not Found
+          description: not found
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
         "500":
-          description: Internal Server Error
+          description: internal error
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
       summary: Получить курьера по ID
       tags:
       - couriers
@@ -178,13 +184,13 @@ paths:
               $ref: '#/definitions/handlers.courierDTO'
             type: array
         "400":
-          description: Bad Request
+          description: invalid limit/offset
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
         "500":
-          description: Internal Server Error
+          description: internal error
           schema:
-            $ref: '#/definitions/handlers.errorResponse'
+            $ref: '#/definitions/handlers.ErrorResponse'
       summary: Список курьеров
       tags:
       - couriers
@@ -211,21 +217,15 @@ paths:
         "400":
           description: invalid input
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
         "409":
           description: no available couriers
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
         "500":
           description: internal error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
       summary: Назначить доставку
       tags:
       - deliveries
@@ -250,23 +250,17 @@ paths:
             additionalProperties: true
             type: object
         "400":
-          description: invalid input
+          description: invalid id
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
         "404":
           description: delivery not found
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
         "500":
           description: internal error
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/handlers.ErrorResponse'
       summary: Снять назначение доставки
       tags:
       - deliveries

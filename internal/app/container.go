@@ -20,7 +20,7 @@ import (
 	"course-go-avito-Orurh/internal/http/pprofserver"
 	"course-go-avito-Orurh/internal/http/router"
 	"course-go-avito-Orurh/internal/logx"
-	"course-go-avito-Orurh/internal/metrics"
+	"course-go-avito-Orurh/internal/prometrics"
 	ordersproto "course-go-avito-Orurh/internal/proto"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/courier"
@@ -291,7 +291,7 @@ func provideOrdersGateway(in ordersGatewayIn) (ordersGateway, ordersConnCloser, 
 }
 
 func provideMetrics() (metricsOut, error) {
-	rl := metrics.NewRateLimitExceededTotal()
+	rl := prometrics.NewRateLimitExceededTotal()
 	if err := prometheus.Register(rl); err != nil {
 		var are prometheus.AlreadyRegisteredError
 		if !errors.As(err, &are) {
@@ -304,7 +304,7 @@ func provideMetrics() (metricsOut, error) {
 		rl = existing
 	}
 
-	gr := metrics.NewGatewayRetriesTotal()
+	gr := prometrics.NewGatewayRetriesTotal()
 	if err := prometheus.Register(gr); err != nil {
 		var are prometheus.AlreadyRegisteredError
 		if !errors.As(err, &are) {

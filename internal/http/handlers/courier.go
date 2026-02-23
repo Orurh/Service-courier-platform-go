@@ -20,16 +20,16 @@ func NewCourierHandler(logger logx.Logger, uc courierUsecase) *CourierHandler {
 	return &CourierHandler{usecase: uc, logger: logger}
 }
 
-// GetByID godoc
+// GetByID handles GET /courier/{id}.
 // @Summary Получить курьера по ID
 // @Description Возвращает курьера по идентификатору
 // @Tags couriers
 // @Produce json
 // @Param id path int true "Courier ID"
 // @Success 200 {object} courierDTO
-// @Failure 400 {object} errorResponse
-// @Failure 404 {object} errorResponse
-// @Failure 500 {object} errorResponse
+// @Failure 400 {object} ErrorResponse "invalid id"
+// @Failure 404 {object} ErrorResponse "not found"
+// @Failure 500 {object} ErrorResponse "internal error"
 // @Router /courier/{id} [get]
 func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := idFromURL(r, "id")
@@ -49,7 +49,7 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// List godoc
+// List handles GET /couriers.
 // @Summary Список курьеров
 // @Description Возвращает список курьеров с опциональной пагинацией (limit/offset)
 // @Tags couriers
@@ -57,8 +57,8 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 // @Param limit query int false "Limit" minimum(0)
 // @Param offset query int false "Offset" minimum(0)
 // @Success 200 {array} courierDTO
-// @Failure 400 {object} errorResponse
-// @Failure 500 {object} errorResponse
+// @Failure 400 {object} ErrorResponse "invalid limit/offset"
+// @Failure 500 {object} ErrorResponse "internal error"
 // @Router /couriers [get]
 func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -88,18 +88,18 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.logger, w, r, http.StatusOK, modelsToResponse(list))
 }
 
-// Create godoc
+// Create handles POST /courier.
 // @Summary Создать курьера
 // @Description Создаёт нового курьера
 // @Tags couriers
 // @Accept json
 // @Produce json
 // @Param request body createCourierRequest true "Create courier payload"
-// @Success 201 {object} idResponse
+// @Success 201 {object} IDResponse "created id"
 // @Header 201 {string} Location "URL созданного ресурса"
-// @Failure 400 {object} errorResponse
-// @Failure 409 {object} errorResponse
-// @Failure 500 {object} errorResponse
+// @Failure 400 {object} ErrorResponse "invalid input"
+// @Failure 409 {object} ErrorResponse "phone already exists"
+// @Failure 500 {object} ErrorResponse "internal error"
 // @Router /courier [post]
 func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createCourierRequest
@@ -120,18 +120,18 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Create godoc
-// @Summary Создать курьера
-// @Description Создаёт нового курьера
+// Update handles PUT /courier.
+// @Summary Обновить курьера
+// @Description Частично обновляет данные курьера по телу запроса
 // @Tags couriers
 // @Accept json
 // @Produce json
 // @Param request body createCourierRequest true "Create courier payload"
-// @Success 201 {object} idResponse
-// @Header 201 {string} Location "URL созданного ресурса"
-// @Failure 400 {object} errorResponse
-// @Failure 409 {object} errorResponse
-// @Failure 500 {object} errorResponse
+// @Success 200 {object} StatusResponse "status ok"
+// @Failure 400 {object} ErrorResponse "invalid input"
+// @Failure 404 {object} ErrorResponse "not found"
+// @Failure 409 {object} ErrorResponse "phone already exists"
+// @Failure 500 {object} ErrorResponse "internal error"
 // @Router /courier [post]
 func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req updateCourierRequest
