@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 
 	"course-go-avito-Orurh/internal/http/handlers"
 	obsmw "course-go-avito-Orurh/internal/http/middleware"
@@ -26,6 +27,9 @@ func New(base *handlers.Handlers, cour *handlers.CourierHandler, delivery *handl
 	r.Get("/ping", base.Ping)
 	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 	r.Method(http.MethodHead, "/healthcheck", http.HandlerFunc(base.HealthcheckHead))
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+	))
 	r.NotFound(http.HandlerFunc(base.NotFound))
 
 	r.Group(func(api chi.Router) {

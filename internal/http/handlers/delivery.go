@@ -19,7 +19,18 @@ func NewDeliveryHandler(logger logx.Logger, uc deliveryUsecase) *DeliveryHandler
 	return &DeliveryHandler{usecase: uc, logger: logger}
 }
 
-// Assign handles the HTTP request for assigning a delivery.
+// Assign handles POST /delivery/assign.
+// @Summary Назначить доставку
+// @Description Назначает курьера на заказ по order_id
+// @Tags deliveries
+// @Accept json
+// @Produce json
+// @Param request body assignDeliveryRequest true "Assign delivery payload"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "invalid input"
+// @Failure 409 {object} ErrorResponse "no available couriers"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /delivery/assign [post]
 func (h *DeliveryHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	var req assignDeliveryRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {
@@ -39,7 +50,18 @@ func (h *DeliveryHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Unassign handles the HTTP request for unassigning a delivery.
+// Unassign handles POST /delivery/unassign.
+// @Summary Снять назначение доставки
+// @Description Снимает назначение курьера с заказа по order_id
+// @Tags deliveries
+// @Accept json
+// @Produce json
+// @Param request body unassignDeliveryRequest true "Unassign delivery payload"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "invalid id"
+// @Failure 404 {object} ErrorResponse "delivery not found"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /delivery/unassign [post]
 func (h *DeliveryHandler) Unassign(w http.ResponseWriter, r *http.Request) {
 	var req unassignDeliveryRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {

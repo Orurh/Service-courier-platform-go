@@ -9,17 +9,19 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
 // DeliveryRepo represents delivery repository.
 type DeliveryRepo struct {
-	db *pgxpool.Pool
+	db  *pgxpool.Pool
+	log logx.Logger
 }
 
 // NewDeliveryRepo creates a new DeliveryRepo.
-func NewDeliveryRepo(db *pgxpool.Pool) *DeliveryRepo {
-	return &DeliveryRepo{db: db}
+func NewDeliveryRepo(db *pgxpool.Pool, log logx.Logger) *DeliveryRepo {
+	return &DeliveryRepo{db: db, log: log}
 }
 
 // WithTx opens a transaction and executes fn within it.
@@ -29,12 +31,11 @@ func (r *DeliveryRepo) WithTx(ctx context.Context, fn func(tx deliverytx.Reposit
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
-	// отменяем в случае паники
 	defer func() {
 		if p := recover(); p != nil {
-			err = tx.Rollback(ctx)
-			if err != nil {
-				panic(err)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				// логируем
+				r.log.Error("tx rollback failed after panic", logx.Any("err", rbErr))
 			}
 			panic(p)
 		}

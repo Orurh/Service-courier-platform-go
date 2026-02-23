@@ -147,9 +147,7 @@ func TestRunner_MustRun_StartupTimeout(t *testing.T) {
 
 	rec := testlog.New()
 	container := dig.New()
-	require.NoError(t, container.Provide(func() logx.Logger {
-		return rec.Logger()
-	}))
+	require.NoError(t, container.Provide(func() logx.Logger { return rec.Logger() }))
 
 	r := &Runner{
 		runFn: func(_ *dig.Container) error {
@@ -183,9 +181,7 @@ func TestRun_InvokesAppRunViaContainer(t *testing.T) {
 		return ctx
 	}))
 
-	require.NoError(t, container.Provide(func() logx.Logger {
-		return logx.Nop()
-	}))
+	require.NoError(t, container.Provide(logx.Nop))
 
 	require.NoError(t, container.Provide(func() *pgxpool.Pool {
 		return nil

@@ -48,58 +48,70 @@ func (s *Service) Assign(ctx context.Context, orderID string) (domain.AssignResu
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 	var result domain.AssignResult
-
 	err = s.repo.WithTx(ctx, func(tx deliverytx.Repository) error {
-		courier, err := tx.FindAvailableCourierForUpdate(ctx)
+		c, err := tx.FindAvailableCourierForUpdate(ctx)
 		if err != nil {
 			return err
 		}
-		if courier == nil {
+		if c == nil {
 			return apperr.ErrConflict
 		}
 
 		now := s.now()
-		deadline, err := s.factory.Deadline(domain.CourierTransportType(courier.TransportType), now)
+		deadline, err := s.factory.Deadline(domain.CourierTransportType(c.TransportType), now)
 		if err != nil {
 			return err
 		}
 
-		d := &domain.Delivery{
-			CourierID:  courier.ID,
-			OrderID:    orderID,
-			AssignedAt: now,
-			Deadline:   deadline,
-		}
+		d, r := buildAssign(now, deadline, orderID, c)
+
 		if err := tx.InsertDelivery(ctx, d); err != nil {
 			return err
 		}
-
-		if err := tx.UpdateCourierStatus(ctx, courier.ID, domain.StatusBusy); err != nil {
+		if err := tx.UpdateCourierStatus(ctx, c.ID, domain.StatusBusy); err != nil {
 			return err
 		}
 
-		result = domain.AssignResult{
-			CourierID:     courier.ID,
-			OrderID:       orderID,
-			TransportType: courier.TransportType,
-			Deadline:      deadline,
-		}
-
+		result = r
 		return nil
 	})
 	if err != nil {
 		return domain.AssignResult{}, err
 	}
 
+	s.logAssigned(result)
+	return result, nil
+}
+
+func buildAssign(
+	now time.Time,
+	deadline time.Time,
+	orderID string,
+	c *domain.Courier,
+) (*domain.Delivery, domain.AssignResult) {
+	d := &domain.Delivery{
+		CourierID:  c.ID,
+		OrderID:    orderID,
+		AssignedAt: now,
+		Deadline:   deadline,
+	}
+	r := domain.AssignResult{
+		CourierID:     c.ID,
+		OrderID:       orderID,
+		TransportType: c.TransportType,
+		Deadline:      deadline,
+	}
+	return d, r
+}
+
+func (s *Service) logAssigned(r domain.AssignResult) {
 	s.logger.Info("courier assigned",
 		logx.String("event", "courier_assigned"),
-		logx.String("order_id", result.OrderID),
-		logx.Int64("courier_id", result.CourierID),
-		logx.String("transport", string(result.TransportType)),
-		logx.Time("deadline", result.Deadline),
+		logx.String("order_id", r.OrderID),
+		logx.Int64("courier_id", r.CourierID),
+		logx.String("transport", string(r.TransportType)),
+		logx.Time("deadline", r.Deadline),
 	)
-
-	return result, nil
 }
 
 // Unassign unassigns a delivery from a courier.

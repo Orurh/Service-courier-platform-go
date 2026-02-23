@@ -1,20 +1,24 @@
 package app
 
 import (
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/dig"
 
+	"course-go-avito-Orurh/internal/config"
 	"course-go-avito-Orurh/internal/http/middleware/ratelimit"
 	"course-go-avito-Orurh/internal/logx"
 )
 
-func newRateLimiter(clock ratelimit.Clock) ratelimit.Limiter {
+func newRateLimiter(cfg *config.Config, clock ratelimit.Clock) ratelimit.Limiter {
+	rl := cfg.RateLimit
+	if !rl.Enabled {
+		return ratelimit.NopLimiter{}
+	}
 	return ratelimit.NewTokenBucketLimiter(clock, ratelimit.Config{
-		Rate:  5,
-		Burst: 5,
-		TTL:   10 * time.Minute,
+		Rate:       rl.Rate,
+		Burst:      rl.Burst,
+		TTL:        rl.TTL,
+		MaxBuckets: rl.MaxBuckets,
 	})
 }
 

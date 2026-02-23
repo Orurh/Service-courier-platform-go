@@ -261,7 +261,6 @@ func TestService_UpdatePartial_RepoError(t *testing.T) {
 	require.ErrorIs(t, err, wantErr)
 }
 
-//nolint:funlen
 func TestService_TimeoutConfiguration_Behavior(t *testing.T) {
 	t.Parallel()
 
@@ -295,37 +294,40 @@ func TestService_TimeoutConfiguration_Behavior(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			ctrl := gomock.NewController(t)
-
-			repo := NewMockcourierRepository(ctrl)
-			svc := courier.NewService(repo, tt.timeout)
-
-			ctx := context.Background()
-			const id int64 = 1
-
-			var capturedCtx context.Context
-			wantErr := errors.New("stop here")
-
-			repo.EXPECT().
-				Get(gomock.Any(), id).
-				DoAndReturn(func(c context.Context, gotID int64) (*domain.Courier, error) {
-					capturedCtx = c
-					require.Equal(t, id, gotID)
-					return nil, wantErr
-				})
-
-			_, err := svc.Get(ctx, id)
-			require.ErrorIs(t, err, wantErr)
-			require.NotNil(t, capturedCtx, "expected captured context")
-
-			deadline, ok := capturedCtx.Deadline()
-			require.True(t, ok, "expected context with deadline")
-
-			remaining := time.Until(deadline)
-
-			require.Greater(t, remaining, tt.wantRange.min)
-			require.Less(t, remaining, tt.wantRange.max)
+			assertServiceUsesTimeoutRange(t, tt.timeout, tt.wantRange.min, tt.wantRange.max)
 		})
 	}
+}
+
+func assertServiceUsesTimeoutRange(t *testing.T, timeout, min, max time.Duration) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	repo := NewMockcourierRepository(ctrl)
+	svc := courier.NewService(repo, timeout)
+
+	ctx := context.Background()
+	const id int64 = 1
+
+	var capturedCtx context.Context
+	wantErr := errors.New("stop here")
+
+	repo.EXPECT().
+		Get(gomock.Any(), id).
+		DoAndReturn(func(c context.Context, gotID int64) (*domain.Courier, error) {
+			capturedCtx = c
+			require.Equal(t, id, gotID)
+			return nil, wantErr
+		})
+
+	_, err := svc.Get(ctx, id)
+	require.ErrorIs(t, err, wantErr)
+	require.NotNil(t, capturedCtx, "expected captured context")
+
+	deadline, ok := capturedCtx.Deadline()
+	require.True(t, ok, "expected context with deadline")
+
+	remaining := time.Until(deadline)
+	require.Greater(t, remaining, min)
+	require.Less(t, remaining, max)
 }

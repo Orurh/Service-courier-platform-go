@@ -21,6 +21,16 @@ func NewCourierHandler(logger logx.Logger, uc courierUsecase) *CourierHandler {
 }
 
 // GetByID handles GET /courier/{id}.
+// @Summary Получить курьера по ID
+// @Description Возвращает курьера по идентификатору
+// @Tags couriers
+// @Produce json
+// @Param id path int true "Courier ID"
+// @Success 200 {object} courierDTO
+// @Failure 400 {object} ErrorResponse "invalid id"
+// @Failure 404 {object} ErrorResponse "not found"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /courier/{id} [get]
 func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := idFromURL(r, "id")
 	if err != nil {
@@ -40,6 +50,16 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // List handles GET /couriers.
+// @Summary Список курьеров
+// @Description Возвращает список курьеров с опциональной пагинацией (limit/offset)
+// @Tags couriers
+// @Produce json
+// @Param limit query int false "Limit" minimum(0)
+// @Param offset query int false "Offset" minimum(0)
+// @Success 200 {array} courierDTO
+// @Failure 400 {object} ErrorResponse "invalid limit/offset"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /couriers [get]
 func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var limitPtr, offsetPtr *int
@@ -69,6 +89,18 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Create handles POST /courier.
+// @Summary Создать курьера
+// @Description Создаёт нового курьера
+// @Tags couriers
+// @Accept json
+// @Produce json
+// @Param request body createCourierRequest true "Create courier payload"
+// @Success 201 {object} IDResponse "created id"
+// @Header 201 {string} Location "URL созданного ресурса"
+// @Failure 400 {object} ErrorResponse "invalid input"
+// @Failure 409 {object} ErrorResponse "phone already exists"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /courier [post]
 func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createCourierRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {
@@ -88,7 +120,19 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Update handles PUT /courier with partial updates from the request body.
+// Update handles PUT /courier.
+// @Summary Обновить курьера
+// @Description Частично обновляет данные курьера по телу запроса
+// @Tags couriers
+// @Accept json
+// @Produce json
+// @Param request body createCourierRequest true "Create courier payload"
+// @Success 200 {object} StatusResponse "status ok"
+// @Failure 400 {object} ErrorResponse "invalid input"
+// @Failure 404 {object} ErrorResponse "not found"
+// @Failure 409 {object} ErrorResponse "phone already exists"
+// @Failure 500 {object} ErrorResponse "internal error"
+// @Router /courier [post]
 func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req updateCourierRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {

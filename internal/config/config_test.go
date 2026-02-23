@@ -1,4 +1,4 @@
-package config_test
+package config
 
 import (
 	"io"
@@ -8,8 +8,6 @@ import (
 
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
-
-	"course-go-avito-Orurh/internal/config"
 )
 
 func resetFlags(t *testing.T) {
@@ -50,17 +48,17 @@ func TestLoad_Defaults(t *testing.T) {
 		"ORDER_GATEWAY_MAX_ATTEMPTS", "ORDER_GATEWAY_BASE_DELAY", "ORDER_GATEWAY_MAX_DELAY",
 	)
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
-	require.Equal(t, config.DefaultPort(), cfg.Port)
+	require.Equal(t, DefaultPort(), cfg.Port)
 
-	require.Equal(t, config.DefaultDB(), cfg.DB)
+	require.Equal(t, DefaultDB(), cfg.DB)
 
-	require.Equal(t, config.DefaultDelivery(), cfg.Delivery)
-	require.Equal(t, config.DefaultOrderServiceHost(), cfg.OrderService)
-	require.Equal(t, config.DefaultOrdersGateway(), cfg.OrdersGateway)
+	require.Equal(t, DefaultDelivery(), cfg.Delivery)
+	require.Equal(t, DefaultOrderServiceHost(), cfg.OrderService)
+	require.Equal(t, DefaultOrdersGateway(), cfg.OrdersGateway)
 }
 
 func TestLoad_EnvOverrides(t *testing.T) {
@@ -81,19 +79,19 @@ func TestLoad_EnvOverrides(t *testing.T) {
 		"ORDER_GATEWAY_MAX_DELAY":        "2s",
 	})
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 
 	require.Equal(t, 9090, cfg.Port)
-	require.Equal(t, config.DB{
+	require.Equal(t, DB{
 		Host: "db", Port: "15432", User: "u", Pass: "p", Name: "service",
 	}, cfg.DB)
-	require.Equal(t, config.Delivery{
+	require.Equal(t, Delivery{
 		AutoReleaseInterval: 30 * time.Second,
 	}, cfg.Delivery)
 	require.Equal(t, "service-order:50051", cfg.OrderService)
-	require.Equal(t, config.OrdersGateway{
+	require.Equal(t, OrdersGateway{
 		MaxAttempts: 5,
 		BaseDelay:   150 * time.Millisecond,
 		MaxDelay:    2 * time.Second,
@@ -106,7 +104,7 @@ func TestLoad_InvalidPort(t *testing.T) {
 	t.Setenv("PORT", "70000")
 	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "10s")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -119,7 +117,7 @@ func TestLoad_InvalidPostgresPort(t *testing.T) {
 	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "10s")
 	t.Setenv("POSTGRES_PASSWORD_FILE", "")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -132,7 +130,7 @@ func TestLoad_InvalidReleaseInterval(t *testing.T) {
 	t.Setenv("DELIVERY_AUTO_RELEASE_INTERVAL", "bad-interval")
 	t.Setenv("POSTGRES_PASSWORD_FILE", "")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -147,7 +145,7 @@ func TestLoad_InvalidOrderGatewayMaxAttempts(t *testing.T) {
 	)
 	t.Setenv("ORDER_GATEWAY_MAX_ATTEMPTS", "0")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -162,7 +160,7 @@ func TestLoad_InvalidOrderGatewayBaseDelay(t *testing.T) {
 	)
 	t.Setenv("ORDER_GATEWAY_BASE_DELAY", "bad")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -178,7 +176,7 @@ func TestLoad_InvalidOrderGatewayMaxDelayLessThanBase(t *testing.T) {
 	t.Setenv("ORDER_GATEWAY_BASE_DELAY", "200ms")
 	t.Setenv("ORDER_GATEWAY_MAX_DELAY", "100ms")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 }
@@ -199,7 +197,7 @@ func TestLoad_FlagsParseError(t *testing.T) {
 	pflag.CommandLine = fs
 	os.Args = []string{"cmd", "--port=not-a-number"}
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 
 	require.Error(t, err)
 	require.Nil(t, cfg)
@@ -220,7 +218,7 @@ func TestLoad_PostgresPasswordFile_ReadError_ReturnsError(t *testing.T) {
 		"POSTGRES_PASSWORD_FILE": secretDir,
 	})
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 	require.Contains(t, err.Error(), "read POSTGRES_PASSWORD_FILE")
@@ -235,8 +233,101 @@ func TestLoad_InvalidKafkaBrokers_EmptyAfterTrim(t *testing.T) {
 
 	t.Setenv("KAFKA_BROKERS", " , ,   , ")
 
-	cfg, err := config.Load()
+	cfg, err := Load()
 	require.Error(t, err)
 	require.Nil(t, cfg)
 	require.Contains(t, err.Error(), "invalid KAFKA_BROKERS")
+}
+
+func TestParseRateLimit_InvalidEnabled(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "notabool")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_ENABLED")
+}
+
+func TestParseRateLimit_Disabled_ReturnsDefaultWithEnabledFalse(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "false")
+
+	got, err := parseRateLimit()
+	require.NoError(t, err)
+
+	want := defaultRateLimit
+	want.Enabled = false
+	require.Equal(t, want, got)
+}
+
+func TestParseRateLimit_InvalidRate_Format(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "oops")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_RATE")
+}
+
+func TestParseRateLimit_InvalidRate_Validate(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "0")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_RATE")
+}
+
+func TestParseRateLimit_InvalidBurst_Format(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "5")
+	t.Setenv("RATE_LIMIT_BURST", "oops")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_BURST")
+}
+
+func TestParseRateLimit_InvalidTTL_Format(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "5")
+	t.Setenv("RATE_LIMIT_BURST", "5")
+	t.Setenv("RATE_LIMIT_TTL", "oops")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_TTL")
+}
+
+func TestParseRateLimit_InvalidTTL_ValidateNegative(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "5")
+	t.Setenv("RATE_LIMIT_BURST", "5")
+	t.Setenv("RATE_LIMIT_TTL", "-1s")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_TTL")
+}
+
+func TestParseRateLimit_InvalidMaxBuckets_Format(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "5")
+	t.Setenv("RATE_LIMIT_BURST", "5")
+	t.Setenv("RATE_LIMIT_TTL", "10s")
+	t.Setenv("RATE_LIMIT_MAX_BUCKETS", "oops")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_MAX_BUCKETS")
+}
+
+func TestParseRateLimit_InvalidMaxBuckets_ValidateNegative(t *testing.T) {
+	t.Setenv("RATE_LIMIT_ENABLED", "true")
+	t.Setenv("RATE_LIMIT_RATE", "5")
+	t.Setenv("RATE_LIMIT_BURST", "5")
+	t.Setenv("RATE_LIMIT_TTL", "10s")
+	t.Setenv("RATE_LIMIT_MAX_BUCKETS", "-1")
+
+	_, err := parseRateLimit()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_MAX_BUCKETS")
 }

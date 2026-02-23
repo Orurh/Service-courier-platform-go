@@ -7,10 +7,12 @@ import (
 
 // Config stores TokenBucketLimiter settings.
 type Config struct {
-	Rate  float64
-	Burst int
-	TTL   time.Duration
+	Rate       float64       // tokens per second
+	Burst      int           // capacity (max tokens)
+	TTL        time.Duration // delete idle buckets (0 disables)
+	MaxBuckets int           // maximum number of buckets
 }
+
 
 // TokenBucketLimiter per-key token bucket limiter.
 type TokenBucketLimiter struct {
@@ -39,6 +41,9 @@ func NewTokenBucketLimiter(clock Clock, cfg Config) *TokenBucketLimiter {
 	if cfg.Burst <= 0 {
 		cfg.Burst = 1
 	}
+	if cfg.MaxBuckets < 0 {
+		cfg.MaxBuckets = 0
+	}
 	return &TokenBucketLimiter{
 		cfg:     cfg,
 		clock:   clock,
@@ -47,7 +52,7 @@ func NewTokenBucketLimiter(clock Clock, cfg Config) *TokenBucketLimiter {
 }
 
 // NewTokenBucketPerWindow is a convenience ctor for "limit per window".
-func NewTokenBucketPerWindow(clock Clock, limit int, window time.Duration, ttl time.Duration) *TokenBucketLimiter {
+func NewTokenBucketPerWindow(clock Clock, limit int, window time.Duration, ttl time.Duration, maxBuckets int) *TokenBucketLimiter {
 	if window <= 0 {
 		window = time.Second
 	}
@@ -55,20 +60,23 @@ func NewTokenBucketPerWindow(clock Clock, limit int, window time.Duration, ttl t
 		limit = 1
 	}
 	return NewTokenBucketLimiter(clock, Config{
-		Rate:  float64(limit) / window.Seconds(),
-		Burst: limit,
-		TTL:   ttl,
+		Rate:       float64(limit) / window.Seconds(),
+		Burst:      limit,
+		TTL:        ttl,
+		MaxBuckets: maxBuckets,
 	})
 }
 
 // Allow returns true if key is allowed to proceed.
 func (l *TokenBucketLimiter) Allow(key string) bool {
 	now := l.clock.Now()
-
+	l.maybeCleanup(now)
 	b := l.getOrCreateBucket(key, now)
+	if b == nil {
+		return false
+	}
 	allowed := b.allow(now, l.cfg.Rate, float64(l.cfg.Burst))
 
-	l.maybeCleanup(now)
 	return allowed
 }
 
@@ -86,6 +94,11 @@ func (l *TokenBucketLimiter) getOrCreateBucket(key string, now time.Time) *bucke
 	if b = l.buckets[key]; b != nil {
 		return b
 	}
+
+	if l.cfg.MaxBuckets > 0 && len(l.buckets) >= l.cfg.MaxBuckets {
+		return nil
+	}
+
 	b = &bucket{
 		tokens:   float64(l.cfg.Burst),
 		last:     now,

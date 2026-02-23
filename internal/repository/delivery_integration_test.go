@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"course-go-avito-Orurh/internal/domain"
+	"course-go-avito-Orurh/internal/logx"
 	"course-go-avito-Orurh/internal/repository"
 	"course-go-avito-Orurh/internal/service/delivery"
 )
@@ -24,7 +25,6 @@ type DeliveryRepositorySuite struct {
 
 func withTxDelivery(ctx context.Context, repo *repository.DeliveryRepo, fn func(tx delivery.TxRepository) error) error {
 	return repo.WithTx(ctx, func(tx delivery.TxRepository) error {
-
 		return fn(tx)
 	})
 }
@@ -33,7 +33,7 @@ func (s *DeliveryRepositorySuite) SetupSuite() {
 	s.Require().NotNil(tcPool, "tcPool must be initialized in TestMain")
 
 	s.pool = tcPool
-	s.deliveryRepo = repository.NewDeliveryRepo(tcPool)
+	s.deliveryRepo = repository.NewDeliveryRepo(tcPool, logx.Nop())
 	s.courierRepo = repository.NewCourierRepo(tcPool)
 }
 

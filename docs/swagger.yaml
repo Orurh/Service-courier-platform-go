@@ -1,0 +1,293 @@
+basePath: /
+definitions:
+  domain.CourierStatus:
+    enum:
+    - available
+    - busy
+    - paused
+    type: string
+    x-enum-varnames:
+    - StatusAvailable
+    - StatusBusy
+    - StatusPaused
+  domain.CourierTransportType:
+    enum:
+    - on_foot
+    - scooter
+    - car
+    type: string
+    x-enum-varnames:
+    - TransportTypeFoot
+    - TransportTypeScooter
+    - TransportTypeCar
+  handlers.ErrorResponse:
+    properties:
+      error:
+        example: invalid input
+        type: string
+    type: object
+  handlers.IDResponse:
+    properties:
+      id:
+        example: 1
+        type: integer
+    type: object
+  handlers.StatusResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  handlers.assignDeliveryRequest:
+    properties:
+      order_id:
+        type: string
+    type: object
+  handlers.courierDTO:
+    properties:
+      id:
+        example: 1
+        type: integer
+      name:
+        example: Иван
+        type: string
+      phone:
+        example: "+79991234567"
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/domain.CourierStatus'
+        example: active
+      transport_type:
+        allOf:
+        - $ref: '#/definitions/domain.CourierTransportType'
+        example: bike
+    type: object
+  handlers.createCourierRequest:
+    properties:
+      name:
+        example: Иван
+        type: string
+      phone:
+        example: "+79991234567"
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/domain.CourierStatus'
+        example: active
+      transport_type:
+        allOf:
+        - $ref: '#/definitions/domain.CourierTransportType'
+        example: bike
+    type: object
+  handlers.unassignDeliveryRequest:
+    properties:
+      order_id:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: HTTP API for courier and delivery management
+  title: Service Courier API
+  version: "1.0"
+paths:
+  /courier:
+    post:
+      consumes:
+      - application/json
+      description: Частично обновляет данные курьера по телу запроса
+      parameters:
+      - description: Create courier payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.createCourierRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: status ok
+          schema:
+            $ref: '#/definitions/handlers.StatusResponse'
+        "400":
+          description: invalid input
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "409":
+          description: phone already exists
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Обновить курьера
+      tags:
+      - couriers
+  /courier/{id}:
+    get:
+      description: Возвращает курьера по идентификатору
+      parameters:
+      - description: Courier ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.courierDTO'
+        "400":
+          description: invalid id
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Получить курьера по ID
+      tags:
+      - couriers
+  /couriers:
+    get:
+      description: Возвращает список курьеров с опциональной пагинацией (limit/offset)
+      parameters:
+      - description: Limit
+        in: query
+        minimum: 0
+        name: limit
+        type: integer
+      - description: Offset
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.courierDTO'
+            type: array
+        "400":
+          description: invalid limit/offset
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Список курьеров
+      tags:
+      - couriers
+  /delivery/assign:
+    post:
+      consumes:
+      - application/json
+      description: Назначает курьера на заказ по order_id
+      parameters:
+      - description: Assign delivery payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.assignDeliveryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: invalid input
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "409":
+          description: no available couriers
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Назначить доставку
+      tags:
+      - deliveries
+  /delivery/unassign:
+    post:
+      consumes:
+      - application/json
+      description: Снимает назначение курьера с заказа по order_id
+      parameters:
+      - description: Unassign delivery payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.unassignDeliveryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: invalid id
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "404":
+          description: delivery not found
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+        "500":
+          description: internal error
+          schema:
+            $ref: '#/definitions/handlers.ErrorResponse'
+      summary: Снять назначение доставки
+      tags:
+      - deliveries
+  /healthcheck:
+    head:
+      description: Lightweight healthcheck endpoint
+      responses:
+        "204":
+          description: No Content
+      summary: Healthcheck probe
+      tags:
+      - system
+  /ping:
+    get:
+      description: Returns pong response in JSON
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Liveness probe
+      tags:
+      - system
+schemes:
+- http
+swagger: "2.0"

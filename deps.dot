@@ -1,45 +1,149 @@
 digraph G {
-rankdir=LR;
-"course-go-avito-Orurh/internal/gateway/orders" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/gateway/orders" -> "course-go-avito-Orurh/internal/proto";
-"course-go-avito-Orurh/internal/service/courier" -> "course-go-avito-Orurh/internal/apperr";
-"course-go-avito-Orurh/internal/service/courier" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/ports/deliverytx" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/service/delivery" -> "course-go-avito-Orurh/internal/apperr";
-"course-go-avito-Orurh/internal/service/delivery" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/service/delivery" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/service/delivery" -> "course-go-avito-Orurh/internal/ports/deliverytx";
-"course-go-avito-Orurh/internal/http/handlers" -> "course-go-avito-Orurh/internal/apperr";
-"course-go-avito-Orurh/internal/http/handlers" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/http/handlers" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/http/handlers" -> "course-go-avito-Orurh/internal/service/courier";
-"course-go-avito-Orurh/internal/http/handlers" -> "course-go-avito-Orurh/internal/service/delivery";
-"course-go-avito-Orurh/internal/http/middleware/ratelimit" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/http/middleware" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/http/router" -> "course-go-avito-Orurh/internal/http/handlers";
-"course-go-avito-Orurh/internal/http/router" -> "course-go-avito-Orurh/internal/http/middleware";
-"course-go-avito-Orurh/internal/http/router" -> "course-go-avito-Orurh/internal/http/middleware/ratelimit";
-"course-go-avito-Orurh/internal/repository" -> "course-go-avito-Orurh/internal/apperr";
-"course-go-avito-Orurh/internal/repository" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/repository" -> "course-go-avito-Orurh/internal/ports/deliverytx";
-"course-go-avito-Orurh/internal/service/orders" -> "course-go-avito-Orurh/internal/apperr";
-"course-go-avito-Orurh/internal/service/orders" -> "course-go-avito-Orurh/internal/domain";
-"course-go-avito-Orurh/internal/service/orders" -> "course-go-avito-Orurh/internal/ports/deliverytx";
-"course-go-avito-Orurh/internal/transport/kafka" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/transport/kafka" -> "course-go-avito-Orurh/internal/service/orders";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/config";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/gateway/orders";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/http/handlers";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/http/middleware/ratelimit";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/http/pprofserver";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/http/router";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/logx";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/metrics";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/proto";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/repository";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/service/courier";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/service/delivery";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/service/orders";
-"course-go-avito-Orurh/internal/app" -> "course-go-avito-Orurh/internal/transport/kafka";
-"course-go-avito-Orurh/internal/testutil" -> "course-go-avito-Orurh/internal/logx";
+  graph [
+    rankdir=TB,
+    fontname="Arial",
+    fontsize=12,
+    labelloc="t",
+    label="Service Courier Platform — package dependencies",
+    splines=ortho,
+    overlap=false,
+    newrank=true,
+    nodesep=0.35,
+    ranksep=0.6,
+    pad=0.2
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="white",
+    color="#CBD5E1",
+    fontname="Arial",
+    fontsize=10,
+    margin="0.08,0.05"
+  ];
+
+  edge [
+    color="#64748B",
+    arrowsize=0.7,
+    penwidth=1.0
+  ];
+
+  // ---------- Core / shared ----------
+  subgraph cluster_core {
+    label = "Core / Shared";
+    color = "#E2E8F0";
+    style = "rounded";
+
+    apperr      [label="apperr", fillcolor="#F8FAFC"];
+    domain      [label="domain", fillcolor="#F8FAFC"];
+    logx        [label="logx", fillcolor="#F8FAFC"];
+    metrics     [label="metrics", fillcolor="#F8FAFC"];
+    config      [label="config", fillcolor="#F8FAFC"];
+    proto       [label="proto", fillcolor="#F8FAFC"];
+    ports_tx    [label="ports/deliverytx", fillcolor="#F8FAFC"];
+  }
+
+  // ---------- Use cases / services ----------
+  subgraph cluster_services {
+    label = "Services / Use cases";
+    color = "#DBEAFE";
+    style = "rounded";
+
+    svc_courier  [label="service/courier", fillcolor="#EFF6FF"];
+    svc_delivery [label="service/delivery", fillcolor="#EFF6FF"];
+    svc_orders   [label="service/orders", fillcolor="#EFF6FF"];
+  }
+
+  // ---------- Inbound adapters ----------
+  subgraph cluster_inbound {
+    label = "Inbound adapters";
+    color = "#DCFCE7";
+    style = "rounded";
+
+    http_handlers   [label="http/handlers", fillcolor="#F0FDF4"];
+    http_mw         [label="http/middleware", fillcolor="#F0FDF4"];
+    http_mw_rl      [label="http/middleware/ratelimit", fillcolor="#F0FDF4"];
+    http_router     [label="http/router", fillcolor="#F0FDF4"];
+    http_pprof      [label="http/pprofserver", fillcolor="#F0FDF4"];
+    kafka_transport [label="transport/kafka", fillcolor="#F0FDF4"];
+  }
+
+  // ---------- Outbound adapters ----------
+  subgraph cluster_outbound {
+    label = "Outbound adapters";
+    color = "#FCE7F3";
+    style = "rounded";
+
+    repo        [label="repository", fillcolor="#FDF2F8"];
+    gw_orders   [label="gateway/orders", fillcolor="#FDF2F8"];
+  }
+
+  // ---------- Composition root ----------
+  subgraph cluster_app {
+    label = "Composition root";
+    color = "#FEF3C7";
+    style = "rounded";
+
+    app [label="app", fillcolor="#FFFBEB"];
+  }
+
+  // ---------- Optional layout hints ----------
+  { rank=min; app; }
+  { rank=same; apperr; domain; logx; metrics; config; proto; ports_tx; }
+  { rank=same; http_router; kafka_transport; gw_orders; repo; }
+
+  // ---------- Dependencies (same meaning as your original graph) ----------
+  gw_orders -> logx;
+  gw_orders -> proto;
+
+  svc_courier -> apperr;
+  svc_courier -> domain;
+
+  ports_tx -> domain;
+
+  svc_delivery -> apperr;
+  svc_delivery -> domain;
+  svc_delivery -> logx;
+  svc_delivery -> ports_tx;
+
+  http_handlers -> apperr;
+  http_handlers -> domain;
+  http_handlers -> logx;
+  http_handlers -> svc_courier;
+  http_handlers -> svc_delivery;
+
+  http_mw_rl -> logx;
+  http_mw -> logx;
+
+  http_router -> http_handlers;
+  http_router -> http_mw;
+  http_router -> http_mw_rl;
+
+  repo -> apperr;
+  repo -> domain;
+  repo -> ports_tx;
+
+  svc_orders -> apperr;
+  svc_orders -> domain;
+  svc_orders -> ports_tx;
+
+  kafka_transport -> logx;
+  kafka_transport -> svc_orders;
+
+  // Composition root wiring (shown as dashed edges)
+  app -> config          [style=dashed, color="#94A3B8", constraint=false];
+  app -> gw_orders       [style=dashed, color="#94A3B8", constraint=false];
+  app -> http_handlers   [style=dashed, color="#94A3B8", constraint=false];
+  app -> http_mw_rl      [style=dashed, color="#94A3B8", constraint=false];
+  app -> http_pprof      [style=dashed, color="#94A3B8", constraint=false];
+  app -> http_router     [style=dashed, color="#94A3B8", constraint=false];
+  app -> logx            [style=dashed, color="#94A3B8", constraint=false];
+  app -> metrics         [style=dashed, color="#94A3B8", constraint=false];
+  app -> proto           [style=dashed, color="#94A3B8", constraint=false];
+  app -> repo            [style=dashed, color="#94A3B8", constraint=false];
+  app -> svc_courier     [style=dashed, color="#94A3B8", constraint=false];
+  app -> svc_delivery    [style=dashed, color="#94A3B8", constraint=false];
+  app -> svc_orders      [style=dashed, color="#94A3B8", constraint=false];
+  app -> kafka_transport [style=dashed, color="#94A3B8", constraint=false];
 }
