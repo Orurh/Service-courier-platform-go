@@ -13,16 +13,13 @@ type Config struct {
 	MaxBuckets int           // maximum number of buckets
 }
 
+
 // TokenBucketLimiter per-key token bucket limiter.
 type TokenBucketLimiter struct {
-	cfg   Config
-	clock Clock
-
-	// map lock only for get/create + cleanup bookkeeping
-	mu      sync.RWMutex
-	buckets map[string]*bucket
-
-	// cleanup bookkeeping
+	cfg         Config
+	clock       Clock
+	mu          sync.RWMutex
+	buckets     map[string]*bucket
 	lastCleanup time.Time
 }
 

@@ -148,7 +148,6 @@ func readSecretFromFile(envKey string) (string, bool, error) {
 }
 
 func loadenv() error {
-	// возвращаем ошибку на верх, но не выходим
 	if err := godotenv.Load(".env"); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("load .env: %w", err)
 	}
@@ -310,7 +309,6 @@ func Load() (*Config, error) {
 	if err := loadenv(); err != nil {
 		return nil, err
 	}
-
 	port, err := parsePort()
 	if err != nil {
 		return nil, err

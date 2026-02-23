@@ -6,7 +6,6 @@ import (
 	"context"
 
 	"course-go-avito-Orurh/internal/domain"
-	// "course-go-avito-Orurh/internal/ports/deliverytx"
 )
 
 // DeliveryPort abstracts the subset of delivery service operations

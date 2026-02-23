@@ -130,7 +130,7 @@ func TestGRPCGateway_ListFrom_SendsUTCFrom_AndMaps(t *testing.T) {
 
 			return &ordersproto.GetOrdersResponse{
 				Orders: []*ordersproto.Order{
-					nil, // должен быть пропущен
+					nil,
 					{Id: "o1", Status: "A", CreatedAt: timestamppb.New(o1Time)},
 					{Id: "o2", Status: "B", CreatedAt: nil},
 				},
