@@ -3,14 +3,21 @@ package logx
 type nopLogger struct{}
 
 // Nop returns a no-op Logger.
-func Nop() Logger { return nopLogger{} }
+func Nop() Logger {
+	return nopLogger{}
+}
 
 func (nopLogger) Debug(string, ...Field) {}
 func (nopLogger) Info(string, ...Field)  {}
 func (nopLogger) Warn(string, ...Field)  {}
 func (nopLogger) Error(string, ...Field) {}
 
-func (nopLogger) With(...Field) Logger { return nopLogger{} }
-func (nopLogger) Sync() error          { return nil }
+func (nopLogger) With(...Field) Logger {
+	return nopLogger{}
+}
+
+func (nopLogger) Sync() error {
+	return nil
+}
 
 var _ Logger = nopLogger{}

@@ -48,22 +48,18 @@ type bound struct {
 	base []logx.Field
 }
 
-// Debug logs a debug message
 func (b bound) Debug(msg string, f ...logx.Field) {
 	b.r.add("debug", msg, append(b.base, f...))
 }
 
-// Info logs an info message
 func (b bound) Info(msg string, f ...logx.Field) {
 	b.r.add("info", msg, append(b.base, f...))
 }
 
-// Warn logs a warn message
 func (b bound) Warn(msg string, f ...logx.Field) {
 	b.r.add("warn", msg, append(b.base, f...))
 }
 
-// Error logs an error message
 func (b bound) Error(msg string, f ...logx.Field) {
 	b.r.add("error", msg, append(b.base, f...))
 }

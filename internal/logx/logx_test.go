@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// наверно не надо тестить это
+// наверно не надо тестить это, но да ладно
 func TestFields_Constructors(t *testing.T) {
 	now := time.Now()
 

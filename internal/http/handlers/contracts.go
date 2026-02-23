@@ -8,7 +8,6 @@ import (
 	"course-go-avito-Orurh/internal/service/delivery"
 )
 
-// courierUsecase exposes courier-related business operations to the HTTP layer.
 type courierUsecase interface {
 	Get(ctx context.Context, id int64) (*domain.Courier, error)
 	List(ctx context.Context, limit, offset *int) ([]domain.Courier, error)

@@ -32,10 +32,9 @@ func TestTokenBucketLimiter_BurstThenBlocksThenRefills(t *testing.T) {
 
 	clk := newFakeClock(time.Unix(0, 0))
 	l := NewTokenBucketLimiter(clk, Config{
-		Rate:  1, // 1 token/sec
-		Burst: 2, // capacity 2
+		Rate:  1,
+		Burst: 2,
 	})
-
 	// full burst at start => 2 allowed
 	require.True(t, l.Allow("ip1"), "expected allow #1")
 	require.True(t, l.Allow("ip1"), "expected allow #2")

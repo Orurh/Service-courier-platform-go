@@ -7,7 +7,6 @@ option go_package = "course-go-avito-Orurh/internal/proto;orderspb";
 import "google/protobuf/timestamp.proto";
 
 // Минимальная модель заказа, которую используем в service-courier:
-// номера полей и типы ДОЛЖНЫ совпасть с сервером.
 message Order {
   string id = 1;
   string status = 9;
