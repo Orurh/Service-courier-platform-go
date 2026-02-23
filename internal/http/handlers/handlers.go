@@ -16,12 +16,23 @@ func New(logger logx.Logger) *Handlers {
 	return &Handlers{Logger: logger}
 }
 
-// Ping handles GET /ping and returns 200 with {"message":"pong"}.
+// Ping godoc
+// @Summary Liveness probe
+// @Description Returns pong response in JSON
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router /ping [get]
 func (h *Handlers) Ping(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.Logger, w, r, http.StatusOK, map[string]string{"message": "pong"})
 }
 
-// HealthcheckHead handles HEAD /healthcheck and returns 204 No Content.
+// HealthcheckHead godoc
+// @Summary Healthcheck probe
+// @Description Lightweight healthcheck endpoint
+// @Tags system
+// @Success 204
+// @Router /healthcheck [head]
 func (h *Handlers) HealthcheckHead(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }

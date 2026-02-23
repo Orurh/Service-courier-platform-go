@@ -54,6 +54,7 @@ help:
 	@echo "  cover-html-all      - общий HTML отчёт (unit + integration) → $(COVER_HTML)"
 	@echo "  clean-cover         - удалить файлы покрытия"
 	@echo "  (alias) cover-html  - == cover-html-all"
+	@echo "  swagger             - swag init (генерация swagger из комментариев)"
 
 db-create:
 	@echo "→ Проверяю наличие БД '$$POSTGRES_DB'..."
@@ -149,6 +150,9 @@ cover-html-all: cover-merge
 	@echo "→ генерирую HTML: $(COVER_HTML)"
 	go tool cover -html=$(COVER_FILE) -o $(COVER_HTML)
 	@echo "✓ готово: $(COVER_HTML)"
+
+swagger:
+	swag init -g main.go -d cmd/service-courier,internal --parseInternal
 
 cover: cover-merge
 cover-html: cover-html-all

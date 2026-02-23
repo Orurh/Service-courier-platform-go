@@ -1,0 +1,456 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "HTTP API for courier and delivery management",
+        "title": "Service Courier API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/courier": {
+            "post": {
+                "description": "Создаёт нового курьера",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "couriers"
+                ],
+                "summary": "Создать курьера",
+                "parameters": [
+                    {
+                        "description": "Create courier payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.createCourierRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.idResponse"
+                        },
+                        "headers": {
+                            "Location": {
+                                "type": "string",
+                                "description": "URL созданного ресурса"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/courier/{id}": {
+            "get": {
+                "description": "Возвращает курьера по идентификатору",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "couriers"
+                ],
+                "summary": "Получить курьера по ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Courier ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.courierDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/couriers": {
+            "get": {
+                "description": "Возвращает список курьеров с опциональной пагинацией (limit/offset)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "couriers"
+                ],
+                "summary": "Список курьеров",
+                "parameters": [
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 0,
+                        "type": "integer",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.courierDTO"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/delivery/assign": {
+            "post": {
+                "description": "Назначает курьера на заказ по order_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "Назначить доставку",
+                "parameters": [
+                    {
+                        "description": "Assign delivery payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.assignDeliveryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "invalid input",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "no available couriers",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/delivery/unassign": {
+            "post": {
+                "description": "Снимает назначение курьера с заказа по order_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "deliveries"
+                ],
+                "summary": "Снять назначение доставки",
+                "parameters": [
+                    {
+                        "description": "Unassign delivery payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.unassignDeliveryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "invalid input",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "delivery not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "internal error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/healthcheck": {
+            "head": {
+                "description": "Lightweight healthcheck endpoint",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Healthcheck probe",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/ping": {
+            "get": {
+                "description": "Returns pong response in JSON",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "domain.CourierStatus": {
+            "type": "string",
+            "enum": [
+                "available",
+                "busy",
+                "paused"
+            ],
+            "x-enum-varnames": [
+                "StatusAvailable",
+                "StatusBusy",
+                "StatusPaused"
+            ]
+        },
+        "domain.CourierTransportType": {
+            "type": "string",
+            "enum": [
+                "on_foot",
+                "scooter",
+                "car"
+            ],
+            "x-enum-varnames": [
+                "TransportTypeFoot",
+                "TransportTypeScooter",
+                "TransportTypeCar"
+            ]
+        },
+        "handlers.assignDeliveryRequest": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.courierDTO": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Иван"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+79991234567"
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CourierStatus"
+                        }
+                    ],
+                    "example": "active"
+                },
+                "transport_type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CourierTransportType"
+                        }
+                    ],
+                    "example": "bike"
+                }
+            }
+        },
+        "handlers.createCourierRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "Иван"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+79991234567"
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CourierStatus"
+                        }
+                    ],
+                    "example": "active"
+                },
+                "transport_type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/domain.CourierTransportType"
+                        }
+                    ],
+                    "example": "bike"
+                }
+            }
+        },
+        "handlers.errorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "invalid input"
+                }
+            }
+        },
+        "handlers.idResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "handlers.unassignDeliveryRequest": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

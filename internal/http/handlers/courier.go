@@ -20,7 +20,17 @@ func NewCourierHandler(logger logx.Logger, uc courierUsecase) *CourierHandler {
 	return &CourierHandler{usecase: uc, logger: logger}
 }
 
-// GetByID handles GET /courier/{id}.
+// GetByID godoc
+// @Summary Получить курьера по ID
+// @Description Возвращает курьера по идентификатору
+// @Tags couriers
+// @Produce json
+// @Param id path int true "Courier ID"
+// @Success 200 {object} courierDTO
+// @Failure 400 {object} errorResponse
+// @Failure 404 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /courier/{id} [get]
 func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id, err := idFromURL(r, "id")
 	if err != nil {
@@ -39,7 +49,17 @@ func (h *CourierHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// List handles GET /couriers.
+// List godoc
+// @Summary Список курьеров
+// @Description Возвращает список курьеров с опциональной пагинацией (limit/offset)
+// @Tags couriers
+// @Produce json
+// @Param limit query int false "Limit" minimum(0)
+// @Param offset query int false "Offset" minimum(0)
+// @Success 200 {array} courierDTO
+// @Failure 400 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /couriers [get]
 func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var limitPtr, offsetPtr *int
@@ -68,7 +88,19 @@ func (h *CourierHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(h.logger, w, r, http.StatusOK, modelsToResponse(list))
 }
 
-// Create handles POST /courier.
+// Create godoc
+// @Summary Создать курьера
+// @Description Создаёт нового курьера
+// @Tags couriers
+// @Accept json
+// @Produce json
+// @Param request body createCourierRequest true "Create courier payload"
+// @Success 201 {object} idResponse
+// @Header 201 {string} Location "URL созданного ресурса"
+// @Failure 400 {object} errorResponse
+// @Failure 409 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /courier [post]
 func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createCourierRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {
@@ -88,7 +120,19 @@ func (h *CourierHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Update handles PUT /courier with partial updates from the request body.
+// Create godoc
+// @Summary Создать курьера
+// @Description Создаёт нового курьера
+// @Tags couriers
+// @Accept json
+// @Produce json
+// @Param request body createCourierRequest true "Create courier payload"
+// @Success 201 {object} idResponse
+// @Header 201 {string} Location "URL созданного ресурса"
+// @Failure 400 {object} errorResponse
+// @Failure 409 {object} errorResponse
+// @Failure 500 {object} errorResponse
+// @Router /courier [post]
 func (h *CourierHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req updateCourierRequest
 	if ok := decodeJSON(h.logger, w, r, &req); !ok {
